@@ -1,0 +1,15 @@
+bot_token: ''
+
+eh_cookies: [{
+  ipb_member_id: "",
+  ipb_pass_hash: "",
+  igneous: "",
+  }
+]
+
+mysql:
+  host: "localhost"  # MySQL 地址
+  prot: 3306         # MySQL 端口
+  user: "root"       # MySQL 用户名
+  password: "password"  # MySQL 密码
+  db: "eh_arc" # 数据库名称
