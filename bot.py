@@ -1,5 +1,5 @@
 import requests, os, json, re, yaml
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters
 from main import addr_status, eh_page, eh_arc, arc_download
 from datetime import datetime
@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import aiomysql
+import asyncio
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 bot_token = config['bot_token']
@@ -450,6 +451,9 @@ async def white_add(update: Update, context: ContextTypes):
     if not user_id in config['gm_list']:
         return
     args = context.args
+    if not args:
+        await update.message.reply_text("请输入用户id")
+        return
     if os.path.exists("./white.json"):
         with open("./white.json", 'r', encoding='utf-8') as f:
             white_list = json.load(f)
@@ -459,13 +463,16 @@ async def white_add(update: Update, context: ContextTypes):
     with open("./white.json", 'w', encoding='utf-8') as f:
         json.dump(w, f, ensure_ascii=False)
     bb = "\n".join(w)
-    await update.message.reply_text(f"添加成功，新增用户：\n{w}")
+    await update.message.reply_text(f"添加成功，新增用户：\n{bb}")
 
 async def white_del(update: Update, context: ContextTypes):
     user_id = update.message.from_user.id
     if not user_id in config['gm_list']:
         return
     args = context.args
+    if not args:
+        await update.message.reply_text("请输入用户id")
+        return
     if os.path.exists("./white.json"):
         with open("./white.json", 'r', encoding='utf-8') as f:
             white_list = json.load(f)
@@ -482,6 +489,9 @@ async def ban_add(update: Update, context: ContextTypes):
     if not user_id in config['gm_list']:
         return
     args = context.args
+    if not args:
+        await update.message.reply_text("请输入用户id")
+        return
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
             black_list = json.load(f)
@@ -491,13 +501,16 @@ async def ban_add(update: Update, context: ContextTypes):
     with open("./black.json", 'w', encoding='utf-8') as f:
         json.dump(w, f, ensure_ascii=False)
     bb = "\n".join(w)
-    await update.message.reply_text(f"添加成功，封禁用户：\n{w}")
+    await update.message.reply_text(f"添加成功，封禁用户：\n{bb}")
 
 async def ban_del(update: Update, context: ContextTypes):
     user_id = update.message.from_user.id
     if not user_id in config['gm_list']:
         return
     args = context.args
+    if not args:
+        await update.message.reply_text("请输入用户id")
+        return
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
             black_list = json.load(f)
@@ -518,14 +531,16 @@ conversation_handler = ConversationHandler(
     fallbacks=[CommandHandler('cancel', cancel)]  # 处理取消命令
 )
 
-def main() -> None:
+async def register_commands():
+    """异步注册命令"""
+    bot = Bot(token=bot_token)
+    await bot.set_my_commands(COMMANDS)
+
+def main():
+    """主函数"""
     app = Application.builder().token(bot_token).build()
 
-    # # 创建调度器
-    # scheduler = AsyncIOScheduler()
-    # scheduler.add_job(status_task, "interval", minutes=5, args=[app.bot])
-    # scheduler.start()  # 启动定时任务
-
+    # 添加命令处理器
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("white_add", white_add))
     app.add_handler(CommandHandler("white_del", white_del))
@@ -533,16 +548,13 @@ def main() -> None:
     app.add_handler(CommandHandler("ban_del", ban_del))
 
     app.add_handler(conversation_handler)
-
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ehentai))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     app.job_queue.run_once(on_startup, 0)
     app.job_queue.run_once(mysql_, 3)
     app.job_queue.run_once(tag_mysql, 10)
-
-    # 注册命令
-    app.bot.set_my_commands(COMMANDS)
+    app.job_queue.run_once(register_commands, 1)
 
     print("🤖 Bot 正在运行...")
     app.run_polling()
