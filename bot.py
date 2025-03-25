@@ -1,5 +1,5 @@
 import requests, os, json, re, yaml
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand
 from telegram.ext import Updater, CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters
 from main import addr_status, eh_page, eh_arc, arc_download
 from datetime import datetime
@@ -10,6 +10,17 @@ import aiomysql
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 bot_token = config['bot_token']
+
+# 定义命令列表
+COMMANDS = [
+    BotCommand("start", "开始使用机器人"),
+    BotCommand("help", "获取帮助信息"),
+    BotCommand("join", "添加节点"),
+    BotCommand("white_add", "id 添加白名单(多个用空格分隔)"),
+    BotCommand("white_del", "id 移除白名单(多个用空格分隔)"),
+    BotCommand("ban", "id 添加黑名单(多个用空格分隔)"),
+    BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)"),
+]
 
 tag_dict = {
     0: "tag_type",  # tag类型
@@ -172,6 +183,14 @@ async def get_translations(english_words):
             return china
 
 async def start(update: Update, context: CallbackContext):
+    if os.path.exists("./black.json"):
+        with open("./black.json", 'r', encoding='utf-8') as f:
+            black_list = json.load(f)
+    else:
+        black_list = []
+    if update.message.from_user.id in black_list:
+        await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
+        return
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接，无法增加用户数据！")
@@ -193,6 +212,22 @@ async def start(update: Update, context: CallbackContext):
                 await update.message.reply_text(f"用户信息录入完成\n用户id：{user_id}\n用户名：{user_name}\n用户初始GP：{20000}\n用户为第{inserted_id}位\n当前上海时间为：{shanghai_time}")
 
 async def join_addr(update: Update, context: CallbackContext):
+    if os.path.exists("./black.json"):
+        with open("./black.json", 'r', encoding='utf-8') as f:
+            black_list = json.load(f)
+    else:
+        black_list = []
+    if update.message.from_user.id in black_list:
+        await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
+        return
+    if os.path.exists("./white.json"):
+        with open("./white.json", 'r', encoding='utf-8') as f:
+            white_list = json.load(f)
+    else:
+        white_list = []
+    if not update.message.from_user.id in black_list:
+        await update.message.reply_text("请先联系管理员添加白名单")
+        return
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
@@ -205,7 +240,7 @@ async def join_addr(update: Update, context: CallbackContext):
     else:
         white_list = []
     if not user_id in white_list:
-        pass
+        return ConversationHandler.END
     async with db_pool.acquire() as conn:  # 获取连接
         async with conn.cursor() as cur:  # 创建游标
             await cur.execute("SELECT * FROM server_data WHERE user_id = %s", (user_id,))
@@ -259,6 +294,14 @@ async def join_1(update: Update, context: CallbackContext):
             return ConversationHandler.END
 
 async def cancel(update: Update, context: CallbackContext):
+    if os.path.exists("./black.json"):
+        with open("./black.json", 'r', encoding='utf-8') as f:
+            black_list = json.load(f)
+    else:
+        black_list = []
+    if update.message.from_user.id in black_list:
+        await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
+        return
     context.user_data.clear()
     await update.message.reply_text("已取消操作")
     return ConversationHandler.END
@@ -269,6 +312,14 @@ async def ehentai(update: Update, context: CallbackContext):
         print("❌ 数据库未连接！")
         pass
     chat_id = update.message.from_user.id
+    if os.path.exists("./black.json"):
+        with open("./black.json", 'r', encoding='utf-8') as f:
+            black_list = json.load(f)
+    else:
+        black_list = []
+    if update.message.from_user.id in black_list:
+        await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
+        return
     pattern = r"(e-hentai|exhentai)"
     if bool(re.search(pattern, update.message.text, re.IGNORECASE)):
         url = update.message.text
@@ -394,6 +445,70 @@ async def button_callback(update: Update, context: CallbackContext):
 #                 url = row[4] + "/api/status"
 #                 key = row[5]
 
+async def white_add(update: Update, context: ContextTypes):
+    user_id = update.message.from_user.id
+    if not user_id in config['gm_list']:
+        return
+    args = context.args
+    if os.path.exists("./white.json"):
+        with open("./white.json", 'r', encoding='utf-8') as f:
+            white_list = json.load(f)
+    else:
+        white_list = []
+    w = white_list + args
+    with open("./white.json", 'w', encoding='utf-8') as f:
+        json.dump(w, f, ensure_ascii=False)
+    bb = "\n".join(w)
+    await update.message.reply_text(f"添加成功，新增用户：\n{w}")
+
+async def white_del(update: Update, context: ContextTypes):
+    user_id = update.message.from_user.id
+    if not user_id in config['gm_list']:
+        return
+    args = context.args
+    if os.path.exists("./white.json"):
+        with open("./white.json", 'r', encoding='utf-8') as f:
+            white_list = json.load(f)
+        white_list = [x for x in white_list if x not in args]
+        with open("./white.json", 'w', encoding='utf-8') as f:
+            json.dump(f, white_list, ensure_ascii=False)
+        b = "\n".join(args)
+        await update.message.reply_text(f"删除成功，被删除的用户：\n{b}")
+    else:
+        await update.message.reply_text("还未创建白名单")
+
+async def ban_add(update: Update, context: ContextTypes):
+    user_id = update.message.from_user.id
+    if not user_id in config['gm_list']:
+        return
+    args = context.args
+    if os.path.exists("./black.json"):
+        with open("./black.json", 'r', encoding='utf-8') as f:
+            black_list = json.load(f)
+    else:
+        black_list = []
+    w = black_list + args
+    with open("./black.json", 'w', encoding='utf-8') as f:
+        json.dump(w, f, ensure_ascii=False)
+    bb = "\n".join(w)
+    await update.message.reply_text(f"添加成功，封禁用户：\n{w}")
+
+async def ban_del(update: Update, context: ContextTypes):
+    user_id = update.message.from_user.id
+    if not user_id in config['gm_list']:
+        return
+    args = context.args
+    if os.path.exists("./black.json"):
+        with open("./black.json", 'r', encoding='utf-8') as f:
+            black_list = json.load(f)
+        black_list = [x for x in black_list if x not in args]
+        with open("./white.json", 'w', encoding='utf-8') as f:
+            json.dump(f, black_list, ensure_ascii=False)
+        b = "\n".join(args)
+        await update.message.reply_text(f"移除成功，被移除黑名单的用户：\n{b}")
+    else:
+        await update.message.reply_text("还未创建黑名单")
+
 conversation_handler = ConversationHandler(
     entry_points=[CommandHandler('join', join_addr)],  # 用户输入 /start 指令时进入对话
     states={
@@ -412,6 +527,10 @@ def main() -> None:
     # scheduler.start()  # 启动定时任务
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("white_add", white_add))
+    app.add_handler(CommandHandler("white_del", white_del))
+    app.add_handler(CommandHandler("ban", ban_add))
+    app.add_handler(CommandHandler("ban_del", ban_del))
 
     app.add_handler(conversation_handler)
 
@@ -421,6 +540,9 @@ def main() -> None:
     app.job_queue.run_once(on_startup, 0)
     app.job_queue.run_once(mysql_, 3)
     app.job_queue.run_once(tag_mysql, 10)
+
+    # 注册命令
+    app.bot.set_my_commands(COMMANDS)
 
     print("🤖 Bot 正在运行...")
     app.run_polling()
