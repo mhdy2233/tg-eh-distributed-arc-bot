@@ -106,7 +106,7 @@ def convert_to_mib(value):
     return int(number) if number.is_integer() else number
 
 def eh_arc(gid, token):
-    url = "https://e-hentai.org/archiver.php?" + f"gid={gid}" + "&" + f"token={token}"
+    url = "https://exhentai.org/archiver.php?" + f"gid={gid}" + "&" + f"token={token}"
     arc = requests.get(url=url, cookies=random.choice(config['eh_cookies']))
 
     soup = BeautifulSoup(arc.text, 'html.parser')

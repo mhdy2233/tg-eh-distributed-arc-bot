@@ -131,7 +131,6 @@ async def tag_mysql(application):
                                 date.append((tag_dict[b], str(z), str(x.get('data', {}).get(z)['name'])))
                             if not date:
                                 continue
-                            print(date)
                             # 获取数据库已有的 tag_data 记录
                             await cur.execute("SELECT tag_type, tag, name FROM tag_data")
                             existing_data = set(await cur.fetchall())  # 转成集合方便去重
@@ -362,6 +361,7 @@ async def button_callback(update: Update, context: CallbackContext):
                     while True:
                         await cur.execute("SELECT * FROM server_data WHERE status = 'active' AND gp_status = 'active' ORDER BY RAND() LIMIT 1")
                         result = await cur.fetchone()  # 获取查询结果
+                        print(result)
                         if not result:
                             await context.bot.send_message(chat_id=query.message.chat.id, text="当前无可用服务器")
                             break
@@ -370,7 +370,7 @@ async def button_callback(update: Update, context: CallbackContext):
                         if link[0]:
                             await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (remnant_gp, query.from_user.id))
                             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
-                            await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp:{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：{link}", reply_markup=keyboard)
+                            await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp:{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard)
                             break
                         else:
                             if "GP不足" in link[1]:

@@ -88,8 +88,8 @@ def process_data():
             
             if data["key"] == key:
                 # 处理数据（获取gid和token然后获取下载链接）
-                gid = data("gid", 0)
-                token = data("token", 0)
+                gid = data['gid']
+                token = data['token']
                 clarity = data['arc']
                 use_gp = data['use_gp']
                 link = detection(gid, token, clarity, use_gp)
