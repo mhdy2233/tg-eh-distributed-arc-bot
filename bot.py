@@ -445,7 +445,7 @@ async def status_task(context: CallbackContext) -> None:
             for row in result:
                 addr = row[4]
                 key = row[5]
-                status = addr_status(addr, token=key)
+                status = await addr_status(addr, token=key)
                 if status == 200:
                     await cur.execute("UPDATE server_data SET status = %s, gp_status = %s WHERE id = %s", ("active", "active", row[0]))
                 elif status == "GP小于50000":
@@ -593,7 +593,7 @@ def main():
     app.job_queue.run_once(on_startup, 0)
     app.job_queue.run_once(mysql_, 3)
     app.job_queue.run_once(tag_mysql, 10)
-    app.job_queue.run_once(register_commands, 1)
+    app.job_queue.run_once(register_commands, 20)
 
     app.job_queue.run_repeating(status_task, interval=300)
 
