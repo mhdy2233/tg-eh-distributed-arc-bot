@@ -1,5 +1,6 @@
 # 分布式tg eh归档bot
-bot端为 bot.py，main.py，config.yml
+## bot端
+bot端所需文件bot.py，main.py，config.yml
 
 使用 `pip install -r requirements.txt` 安装依赖。  
 创建一个mysql数据库(使用utf8mb4格式)  
@@ -25,3 +26,12 @@ eh_cookies: [{
 /join 添加后端节点  
 
 使用方法直接对bot发送eh或ex链接即可  
+
+## 后端节点
+后端节点文件为client.py  
+修改文件中的cookie以及key和端口  
+key为在bot中添加时所需  
+`python3 client.py` 启动  
+**注意事项：**
+首先你的网络需要可以连接到e-hentai以及exhentai  
+client需要flask, flask_CROS, bs4, requests，可以使用pip3进行安装
