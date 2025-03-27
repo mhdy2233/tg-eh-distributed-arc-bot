@@ -28,7 +28,7 @@ def detection(gid,token,clarity,use_gp):
                     return False, f"GP不足，GP还剩余{[m_list[0]]}，C还剩余{[m_list[2]]}"
     for x in soup.find_all('p'):
         if "You unlocked a " in x.text:
-            if not refresh_url:
+            if not refresh_url(gid=gid, token=token):
                 return False, "链接销毁失败"
 
     link = download_url(gid,token,clarity)

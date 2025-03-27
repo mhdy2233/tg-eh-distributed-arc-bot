@@ -106,7 +106,7 @@ def convert_to_mib(value):
     return int(number) if number.is_integer() else number
 
 def eh_arc(gid, token):
-    url = "https://exhentai.org/archiver.php?" + f"gid={gid}" + "&" + f"token={token}"
+    url = f"https://exhentai.org/archiver.php?gid={gid}&token={token}"
     arc = requests.get(url=url, cookies=random.choice(config['eh_cookies']))
 
     soup = BeautifulSoup(arc.text, 'html.parser')
@@ -117,7 +117,7 @@ def eh_arc(gid, token):
     resample_size = convert_to_mib(strong[3].text)   # 重彩样大小
     if strong[2].text == "Free!":
         original_gp = round(original_size / 0.063)
-        resample_gp = round(original_size / 0.063)
+        resample_gp = round(resample_size / 0.063)
     else:
         original_gp = round(int(strong[0].text.split(" ")[0].replace(",", "")))
         resample_gp = round(int(strong[2].text.split(" ")[0].replace(",", "")))
