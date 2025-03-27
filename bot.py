@@ -477,8 +477,10 @@ async def white_del(update: Update, context: ContextTypes):
         with open("./white.json", 'r', encoding='utf-8') as f:
             white_list = json.load(f)
         white_list = [x for x in white_list if x not in args]
+        if not white_list:
+            white_list = []
         with open("./white.json", 'w', encoding='utf-8') as f:
-            json.dump(f, white_list, ensure_ascii=False)
+            json.dump(white_list, f, ensure_ascii=False)
         b = "\n".join(args)
         await update.message.reply_text(f"删除成功，被删除的用户：\n{b}")
     else:
@@ -515,8 +517,10 @@ async def ban_del(update: Update, context: ContextTypes):
         with open("./black.json", 'r', encoding='utf-8') as f:
             black_list = json.load(f)
         black_list = [x for x in black_list if x not in args]
-        with open("./white.json", 'w', encoding='utf-8') as f:
-            json.dump(f, black_list, ensure_ascii=False)
+        if not black_list:
+            black_list = []
+        with open("./black.json", 'w', encoding='utf-8') as f:
+            json.dump(black_list, f, ensure_ascii=False)
         b = "\n".join(args)
         await update.message.reply_text(f"移除成功，被移除黑名单的用户：\n{b}")
     else:

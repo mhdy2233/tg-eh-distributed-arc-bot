@@ -46,7 +46,7 @@ def download_url(gid,token,clarity):
         "dltype": cc,
         "dlcheck": f"Download {clarity} Archive",  # 按钮对应的名字和按钮值
     }
-    arc_url = "https://exhentai.org/archiver.php" + f"?gid={gid}" + f"&token={token}"
+    arc_url = f"https://exhentai.org/archiver.php?gid={gid}&token={token}"
     response = requests.post(arc_url, data=payload, cookies=eh_cookie)
     # 对下载原始图像进行post请求
     if response.status_code == 200:
@@ -62,13 +62,11 @@ def download_url(gid,token,clarity):
 
 def refresh_url(gid, token):
     # 销毁下载链接
-    data = {
-        "gid": gid,
-        "token": token,
-        "invalidate_sessions": 1
+    payload = {
+        "invalidate_sessions": 1,
     }
-    arc_url = "https://exhentai.org/archiver.php"
-    response = requests.post(arc_url, data=data, cookies=eh_cookie)
+    arc_url = f"https://exhentai.org/archiver.php?gid={gid}&token={token}"
+    response = requests.post(arc_url, data=payload, cookies=eh_cookie)
     if response.status_code == 200:
         return True
     else:
@@ -126,8 +124,8 @@ def status():
                         if int(m_list[0].replace(",", "")) > 50000:
                             return jsonify({"status": 200})
                         else:
-                            return jsonify({"error": "GP小于50000"})
                             print("GP小于50000无法加入")
+                            return jsonify({"error": "GP小于50000"})
         else:
             print("里站无内容，请检查cookie是否正确")
             return jsonify({"error": "里站无内容，请检查cookie是否正确"})
