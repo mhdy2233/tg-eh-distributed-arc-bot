@@ -5,9 +5,8 @@ from main import addr_status, eh_page, eh_arc, arc_download
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import aiomysql
-import asyncio
+
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 bot_token = config['bot_token']
@@ -17,6 +16,7 @@ COMMANDS = [
     BotCommand("start", "开始使用机器人"),
     BotCommand("help", "获取帮助信息"),
     BotCommand("join", "添加节点"),
+    BotCommand("server_list", "查看后端列表"),
     BotCommand("white_add", "id 添加白名单(多个用空格分隔)"),
     BotCommand("white_del", "id 移除白名单(多个用空格分隔)"),
     BotCommand("ban", "id 添加黑名单(多个用空格分隔)"),
@@ -432,19 +432,27 @@ async def button_callback(update: Update, context: CallbackContext):
                             await context.bot.send_message(chat_id=server_user_id, text=link[1])
         context.user_data.clear()
 
-# async def status_task(context: CallbackContext) -> None:
-#     """定时任务，每5分钟执行一次"""
-#     global db_pool
-#     if not db_pool:
-#         print("❌ 数据库未连接！")
-#         return
-#     async with db_pool.acquire() as conn:
-#         async with conn.cursor() as cur:
-#             await cur.execute("SELECT * FROM server_data")  # 查询所有数据
-#             result = await cur.fetchall()  # 获取所有行
-#             for row in result:
-#                 url = row[4] + "/api/status"
-#                 key = row[5]
+async def status_task(context: CallbackContext) -> None:
+    """定时任务"""
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM server_data")  # 查询所有数据
+            result = await cur.fetchall()  # 获取所有行
+            for row in result:
+                addr = row[4]
+                key = row[5]
+                status = addr_status(addr, token=key)
+                if status == 200:
+                    await cur.execute("UPDATE server_data SET status = %s, gp_status = %s WHERE id = %s", ("active", "active", row[0]))
+                elif status == "GP小于50000":
+                    await cur.execute("UPDATE server_data SET gp_status = %s WHERE id = %s", ("inactive", row[0]))
+                else:
+                    await cur.execute("UPDATE server_data SET status = %s WHERE id = %s", ("inactive", row[0]))
+
 
 async def white_add(update: Update, context: ContextTypes):
     user_id = update.message.from_user.id
@@ -526,6 +534,31 @@ async def ban_del(update: Update, context: ContextTypes):
     else:
         await update.message.reply_text("还未创建黑名单")
 
+async def server_list(update: Update, context: ContextTypes):
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM server_data")  # 查询所有数据
+            result = await cur.fetchall()  # 获取所有行
+            active = 0
+            inactive = 0
+            gp_inactive = 0
+            for x in result:
+                if x[6] == "active" and x[7] == "active":
+                    active += 1
+                elif x[6] == "inactive":
+                    inactive += 1
+                elif x[7] == "inactive":
+                    gp_inactive += 1
+            message = f"当前共有 **{len(result)}** 个后端节点\n✅在线可用有 **{active}** 个\n❎掉线或状态异常有 **{inactive}** 个\n❎gp不足有 **{gp_inactive}** 个"
+            await update.message.reply_markdown(text=message)
+
+async def help_(update: Update, context: ContextTypes):
+    await update.message.reply_markdown(text=f"此bot为分布式eh归档链接获取bot\n基于[此项目](https://github.com/mhdy2233/tg-eh-distributed-arc-bot)制作")
+
 conversation_handler = ConversationHandler(
     entry_points=[CommandHandler('join', join_addr)],  # 用户输入 /start 指令时进入对话
     states={
@@ -550,6 +583,8 @@ def main():
     app.add_handler(CommandHandler("white_del", white_del))
     app.add_handler(CommandHandler("ban", ban_add))
     app.add_handler(CommandHandler("ban_del", ban_del))
+    app.add_handler(CommandHandler("server_list", server_list))
+    app.add_handler(CommandHandler("help", help_))
 
     app.add_handler(conversation_handler)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ehentai))
@@ -559,6 +594,8 @@ def main():
     app.job_queue.run_once(mysql_, 3)
     app.job_queue.run_once(tag_mysql, 10)
     app.job_queue.run_once(register_commands, 1)
+
+    app.job_queue.run_repeating(status_task, interval=300)
 
     print("🤖 Bot 正在运行...")
     app.run_polling()
