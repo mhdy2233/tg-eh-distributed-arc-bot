@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
-proxies = config.get("proxies")
+
 def obtain_cover(eh_text):
     """获取画廊封面
 
@@ -18,7 +18,7 @@ def obtain_cover(eh_text):
     match = re.search(r'url\((https?://[^\s)]+)\)', div['style'])
     if match:
         img_url = match.group(1)
-        response = requests.get(img_url, cookies=random.choice(config['eh_cookies']), proxies=proxies)
+        response = requests.get(img_url, cookies=random.choice(config['eh_cookies']))
     
         if response.status_code == 200:
             # 将图片数据保存到内存中的 BytesIO 对象
@@ -52,12 +52,8 @@ async def addr_status(addr,token):
 async def eh_page(gid, token):
     eh_cookie = random.choice(config['eh_cookies'])
     url = "https://exhentai.org/g/" + str(gid) + "/" + str(token)
-<<<<<<< Updated upstream
     print(url)
     eh = requests.get(url, cookies=eh_cookie)
-=======
-    eh = requests.get(url, cookies=eh_cookie, proxies=proxies)
->>>>>>> Stashed changes
     if eh.status_code == 200:
         if eh.text == "Key missing, or incorrect key provided.":
             return 400
@@ -111,7 +107,7 @@ def convert_to_mib(value):
 
 def eh_arc(gid, token):
     url = f"https://exhentai.org/archiver.php?gid={gid}&token={token}"
-    arc = requests.get(url=url, cookies=random.choice(config['eh_cookies']), proxies=proxies)
+    arc = requests.get(url=url, cookies=random.choice(config['eh_cookies']))
 
     soup = BeautifulSoup(arc.text, 'html.parser')
     if soup == "This gallery is currently unavailable.":

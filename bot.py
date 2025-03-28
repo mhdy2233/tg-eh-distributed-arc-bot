@@ -1,6 +1,6 @@
 import requests, os, json, re, yaml, random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, Bot
-from telegram.ext import Updater, CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters
+from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters
 from main import addr_status, eh_page, eh_arc, arc_download
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -18,10 +18,10 @@ COMMANDS = [
     BotCommand("help", "获取帮助信息"),
     BotCommand("join", "添加节点"),
     BotCommand("server_list", "查看后端列表"),
+    BotCommand("last_page", "查看最新下载的5个画廊"),
     BotCommand("white_add", "id 添加白名单(多个用空格分隔)"),
     BotCommand("white_del", "id 移除白名单(多个用空格分隔)"),
     BotCommand("ban", "id 添加黑名单(多个用空格分隔)"),
-    BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)")
     BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)"),
     BotCommand("del_client", "停用我的后端节点"),
     BotCommand("start_client", "修改并启用后端节点"),
@@ -99,9 +99,9 @@ async def mysql_(application):
                     user_id BIGINT NOT NULL UNIQUE,
                     username VARCHAR(255),
                     user_gp INT,
-                    use_gps INT,
-                    use_num INT,
-                    use_time, DATETIME
+                    use_gps INT DEFAULT 0,
+                    use_num INT DEFAULT 0,
+                    use_time DATETIME
                 )
             """)
             print("✅ 数据表 `user_data` 已创建或已存在！")
@@ -114,7 +114,9 @@ async def mysql_(application):
                     addr VARCHAR(255) UNIQUE NOT NULL,
                     token VARCHAR(255) NOT NULL,
                     status VARCHAR(255) NOT NULL,
-                    gp_status VARCHAR(255) NOT NULL
+                    gp_status VARCHAR(255) NOT NULL,
+                    enable VARCHAR(255) NOT NULL,
+                    use_gps INT DEFAULT 0
                 )
             """)
             print("✅ 数据表 `server_data` 已创建或已存在！")
@@ -126,6 +128,21 @@ async def mysql_(application):
                 )
             """)
             print("✅ 数据表 `tag_data` 已创建或已存在！")
+            await cur.execute("""
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    time DATETIME NOT NULL,
+                    client_id INT,
+                    user_id INT NOT NULL,
+                    title1 VARCHAR(300),
+                    title2 VARCHAR(300),
+                    url VARCHAR(255),
+                    image_url VARCHAR(255),
+                    type VARCHAR(255),
+                    use_gp INT
+                )
+            """)
+            print("✅ 数据表 `logs` 已创建或已存在！")
 
 async def tag_mysql(application):
     """使用数据库进行翻译tag"""
@@ -167,7 +184,6 @@ async def tag_mysql(application):
                         print("tag增加完成")
 
 async def get_translations(english_words):
-    print(english_words)
     # 确保英文字词列表不为空
     if not english_words:
         return []
@@ -189,7 +205,6 @@ async def get_translations(english_words):
                 translation_dict = {row[1]: row[2] for row in result}
                 z = b + [translation_dict.get(word, word) for word in x[1:]]  # 如果没有翻译，返回英文单词本身
                 china.append(z)
-            print(china)
             return china
 
 async def start(update: Update, context: CallbackContext):
@@ -293,7 +308,7 @@ async def join_1(update: Update, context: CallbackContext):
             async with db_pool.acquire() as conn:  # 获取连接
                 async with conn.cursor() as cur:  # 创建游标
                     shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
-                    await cur.execute("INSERT INTO server_data (created_time, user_id, username, addr, token, status, gp_status) VALUES (%s, %s, %s, %s, %s, %s, %s)", (shanghai_time, context.user_data['user_id'], context.user_data['username'], addr, token, "active", "active"))
+                    await cur.execute("INSERT INTO server_data (created_time, user_id, username, addr, token, status, gp_status, enable) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, context.user_data['user_id'], context.user_data['username'], addr, token, "active", "active", "on"))
                     inserted_id = cur.lastrowid
                     await update.message.reply_text(f"恭喜添加成功！\n用户id：{context.user_data['user_id']}\n编号：{inserted_id}\n地址：{context.user_data['addr']}\n密钥：{token}")
                     context.user_data.clear()
@@ -373,6 +388,7 @@ async def ehentai(update: Update, context: CallbackContext):
                     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("跳转画廊", url=url), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")]])
                     context.user_data['主标题'] = result[1][0]
                     context.user_data['副标题'] = result[1][1]
+                    context.user_data['image'] = result[2]
                     await context.bot.edit_message_media(
                         media=InputMediaPhoto(media=result[0], caption=caption, parse_mode="HTML"),
                         reply_markup=keyboard,
@@ -407,7 +423,7 @@ async def button_callback(update: Update, context: CallbackContext):
                 else:
                     await context.bot.send_message(chat_id=query.message.chat.id, text="请先使用 /start 录入用户数据")
                     context.user_data.clear()
-    if data[0] == 'original' or data[0] == 'resample':
+    elif data[0] == 'original' or data[0] == 'resample':
         gid, token, use_gp = data[1], data[2], data[3]
         if not db_pool:
             print("❌ 数据库未连接，无法增加用户数据！")
@@ -423,7 +439,6 @@ async def button_callback(update: Update, context: CallbackContext):
                     while True:
                         await cur.execute("SELECT * FROM server_data WHERE status = 'active' AND gp_status = 'active' ORDER BY RAND() LIMIT 1")
                         result = await cur.fetchone()  # 获取查询结果
-                        print(result)
                         if not result:
                             await context.bot.send_message(chat_id=query.message.chat.id, text="当前无可用服务器")
                             break
@@ -433,7 +448,9 @@ async def button_callback(update: Update, context: CallbackContext):
                             shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
                             await cur.execute("UPDATE user_data SET user_gp = %s, use_gps = %s, use_num = %s, use_time = %s WHERE user_id = %s", (remnant_gp, user_data[5] + int(use_gp), user_data[6] + 1, shanghai_time, query.from_user.id))
                             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
-                            await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp:{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard)
+                            await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard)
+                            await cur.execute("UPDATE server_data SET use_gps = %s WHERE user_id = %s", (result[9] + int(use_gp), server_user_id))
+                            await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], query.from_user.id, context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp) ))
                             break
                         else:
                             if "GP不足" in link[1]:
@@ -442,6 +459,24 @@ async def button_callback(update: Update, context: CallbackContext):
                                 await cur.execute("UPDATE server_data SET status = %s WHERE user_id = %s", ("inactive", server_user_id))
                             await context.bot.send_message(chat_id=server_user_id, text=link[1])
         context.user_data.clear()
+    elif data[0] == "yes_del":
+        if not db_pool:
+            print("❌ 数据库未连接！")
+            return
+        async with db_pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE server_data SET enable = %s WHERE id = %s", ("off", data[1]))
+                await context.bot.send_message(chat_id=query.message.chat.id, text="停用成功")
+    elif data[0] == "yes_start":
+        if not db_pool:
+            print("❌ 数据库未连接！")
+            return
+        async with db_pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE server_data SET enable = %s WHERE id = %s", ("on", data[1]))
+                await context.bot.send_message(chat_id=query.message.chat.id, text="启用成功")
+    elif data[0] == "cancel":
+        await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
 
 async def status_task(context: CallbackContext) -> None:
     """定时任务"""
@@ -451,7 +486,7 @@ async def status_task(context: CallbackContext) -> None:
         return
     async with db_pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("SELECT * FROM server_data")  # 查询所有数据
+            await cur.execute("SELECT * FROM server_data WHERE enable = %s", ("on"))  # 查询所有数据
             result = await cur.fetchall()  # 获取所有行
             for row in result:
                 addr = row[4]
@@ -669,22 +704,60 @@ async def last_page(update: Update, context: ContextTypes):
         async with conn.cursor() as cur:
             await cur.execute("SELECT * FROM logs ORDER BY id DESC LIMIT 5;")  # 查询最新的5条
             result = await cur.fetchall()
-            captions = []
-            photos = []
-            for x in result:
-                photos.append(x[7])
-            b = 0
-            for x in result:
-                b += 1
-                if x[4]:
-                    captions.append(f"{b}. <a href='{x[6]}'>{x[4]}</a>")
-                elif x[5]:
-                    captions.append(f"{b}. <a href='{x[6]}'>{x[5]}</a>")
-            media_group = [
-                InputMediaPhoto(media=photo, caption=caption, parse_mode='HTML') 
-                for photo, caption in zip(photos, captions)
-            ]
-            await update.message.reply_media_group(media=media_group)
+            if not result:
+                await update.message.reply_text("没有画廊")
+            else:
+                captions = []
+                media_group = []
+                b = 0
+                for x in result:
+                    b += 1
+                    z = str(x[6]).split("|")
+                    if x[4]:
+                        captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[4]}</a>")
+                    elif x[5]:
+                        captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[5]}</a>")
+                for x, caption in zip(result, captions):
+                    response = requests.get(x[7], cookies=random.choice(config['eh_cookies']), proxies=proxies)
+                    if response.status_code == 200:
+                        image_bytes = BytesIO(response.content)
+                        image_bytes.name = x[7]  # Telegram 需要文件名
+                        media_group.append(InputMediaPhoto(media=image_bytes, caption=caption, parse_mode='HTML'))
+                await update.message.reply_media_group(media=media_group)
+
+async def check_in(update: Update, context: ContextTypes):
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (update.message.from_user.id))
+            result = await cur.fetchone()  # 获取查询结果
+            if not result:
+                await update.message.reply_text("请先使用 /start 注册")
+            else:
+                random_number = random.randint(15000, 40000)
+                await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (random_number + result[4], update.message.from_user.id))
+                await update.message.reply_text(f"签到成功！\n获得{random_number}GP")
+
+async def add_gp(update: Update, context: ContextTypes):
+    args = context.args
+    if not update.message.from_user.id in config['gm_list']:
+        pass
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (args[0]))
+            result = await cur.fetchone()  # 获取查询结果
+            if not result:
+                await update.message.reply_text("该用户未注册")
+            else:
+                await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (args[1] + result[4], args[0]))
+                await update.message.reply_text(f"添加成功现在一共有：{args[1] + result[4]}GP")
 
 join_handler = ConversationHandler(
     entry_points=[CommandHandler('join', join_addr)],  # 用户输入 /start 指令时进入对话
@@ -693,6 +766,22 @@ join_handler = ConversationHandler(
         "join_1": [MessageHandler(filters.TEXT & ~filters.COMMAND, join_1)]
     },
     fallbacks=[CommandHandler('cancel', cancel)]  # 处理取消命令
+)
+
+addr_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(addr_client, pattern="^addr$")],
+    states={
+        "ssss": [MessageHandler(filters.TEXT & ~filters.COMMAND, addr_client_yes)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+)
+
+token_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(token_client, pattern="^token$")],
+    states={
+        "zzzz": [MessageHandler(filters.TEXT & ~filters.COMMAND, token_client_yes)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
 )
 
 async def register_commands(app):
@@ -714,8 +803,12 @@ def main():
     app.add_handler(CommandHandler("del_client", del_client))
     app.add_handler(CommandHandler("start_client", start_client))
     app.add_handler(CommandHandler("last_page", last_page))
+    app.add_handler(CommandHandler("check_in", check_in))
+    app.add_handler(CommandHandler("add_gp", add_gp))
 
-    app.add_handler(conversation_handler)
+    app.add_handler(join_handler)
+    app.add_handler(addr_handler)
+    app.add_handler(token_handler)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ehentai))
     app.add_handler(CallbackQueryHandler(button_callback))
 
