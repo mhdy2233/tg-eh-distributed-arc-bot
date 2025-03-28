@@ -20,7 +20,7 @@ COMMANDS = [
     BotCommand("white_add", "id 添加白名单(多个用空格分隔)"),
     BotCommand("white_del", "id 移除白名单(多个用空格分隔)"),
     BotCommand("ban", "id 添加黑名单(多个用空格分隔)"),
-    BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)"),
+    BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)")
 ]
 
 tag_dict = {
@@ -92,7 +92,10 @@ async def mysql_(application):
                     created_time DATETIME,
                     user_id BIGINT NOT NULL UNIQUE,
                     username VARCHAR(255),
-                    user_gp INT
+                    user_gp INT,
+                    use_gps INT,
+                    use_num INT,
+                    use_time, DATETIME
                 )
             """)
             print("✅ 数据表 `user_data` 已创建或已存在！")
@@ -206,7 +209,7 @@ async def start(update: Update, context: CallbackContext):
             if result:
                 await update.message.reply_text(f"你好，我是eh归档bot，\n你可以将eh/ex链接发送给我用以获取归档下载链接\n当前上海时间为：{shanghai_time}")
             else:
-                await cur.execute("INSERT INTO user_data (created_time, user_id, username, user_gp) VALUES (%s, %s, %s, %s)", (shanghai_time, user_id, user_name, 20000))
+                await cur.execute("INSERT INTO user_data (created_time, user_id, username, user_gp, use_gps, use_num) VALUES (%s, %s, %s, %s, %s, %s)", (shanghai_time, user_id, user_name, 20000, 0, 0))
                 inserted_id = cur.lastrowid
                 if not inserted_id:
                     inserted_id = 0
@@ -365,10 +368,10 @@ async def ehentai(update: Update, context: CallbackContext):
                     context.user_data['主标题'] = result[1][0]
                     context.user_data['副标题'] = result[1][1]
                     await context.bot.edit_message_media(
-                        media=InputMediaPhoto(media=result[0], caption=caption),
+                        media=InputMediaPhoto(media=result[0], caption=caption, parse_mode="HTML"),
                         reply_markup=keyboard,
                         chat_id=chat_id,
-                        message_id=aaa.message_id)
+                        message_id=aaa.message_id,)
 
 async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -404,8 +407,8 @@ async def button_callback(update: Update, context: CallbackContext):
         async with db_pool.acquire() as conn:  # 获取连接
             async with conn.cursor() as cur:  # 创建游标
                 await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (query.from_user.id,))
-                result = await cur.fetchone()  # 获取查询结果（单条数据）
-                gp = result[4]
+                user_data = await cur.fetchone()  # 获取查询结果（单条数据）
+                gp = user_data[4]
                 remnant_gp = gp - int(use_gp)
                 if remnant_gp < 0:
                     await context.bot.send_message(chat_id=query.message.chat.id, text="剩余gp不足")
@@ -420,7 +423,8 @@ async def button_callback(update: Update, context: CallbackContext):
                         addr, key, server_user_id = result[4], result[5], result[2]
                         link = arc_download(addr, key, gid, token, clarity=data[0], use_gp=int(use_gp))
                         if link[0]:
-                            await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (remnant_gp, query.from_user.id))
+                            shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
+                            await cur.execute("UPDATE user_data SET user_gp = %s, use_gps = %s, use_num = %s, use_time = %s WHERE user_id = %s", (remnant_gp, user_data[5] + int(use_gp), user_data[6] + 1, shanghai_time, query.from_user.id))
                             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
                             await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp:{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard)
                             break
@@ -568,10 +572,9 @@ conversation_handler = ConversationHandler(
     fallbacks=[CommandHandler('cancel', cancel)]  # 处理取消命令
 )
 
-async def register_commands():
+async def register_commands(app):
     """异步注册命令"""
-    bot = Bot(token=bot_token)
-    await bot.set_my_commands(COMMANDS)
+    await app.bot.set_my_commands(COMMANDS)
 
 def main():
     """主函数"""
@@ -592,10 +595,11 @@ def main():
 
     app.job_queue.run_once(on_startup, 0)
     app.job_queue.run_once(mysql_, 3)
-    app.job_queue.run_once(tag_mysql, 10)
-    app.job_queue.run_once(register_commands, 20)
+
+    app.post_init = register_commands
 
     app.job_queue.run_repeating(status_task, interval=300)
+    app.job_queue.run_repeating(tag_mysql, interval=86400)
 
     print("🤖 Bot 正在运行...")
     app.run_polling()

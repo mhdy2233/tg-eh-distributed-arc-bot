@@ -64,7 +64,7 @@ async def eh_page(gid, token):
         title1 = soup.find('h1', id='gn').text   # 主标题
         title2 = soup.find('h1', id='gj').text   # 副标题
         page_type = soup.find('div', id='gdc').text.lower()  # 画廊类型
-        uploader = soup.find('div', id='gdn').find('a').text    # 上传者
+        uploader = f"<a href='{soup.find('div', id='gdn').find('a')['href']}'>{soup.find('div', id='gdn').find('a').text}</a>"    # 上传者
         posted = soup.find_all('td', class_='gdt2')[0].text   # 上传时间
         language = soup.find_all('td', class_='gdt2')[3].text.lower()   # 语言
         size = soup.find_all('td', class_='gdt2')[4].text   # 大小
