@@ -10,16 +10,19 @@ eh_cookie = {
     "ipb_pass_hash": "",
     "igneous": ""
 }
-
+proxies = {
+    # "http": "http://127.0.0.1:8080",
+    # "https": "http://127.0.0.1:8080"
+}
 def detection(gid,token,clarity,use_gp):
     # 检测是否有下载链接
     arc_url = "https://exhentai.org/archiver.php" + f"?gid={gid}" + f"&token={token}"
-    response = requests.get(arc_url, cookies=eh_cookie)
+    response = requests.get(arc_url, cookies=eh_cookie, proxies=proxies)
     soup = BeautifulSoup(response.text, 'html.parser')
     free = soup.find('strong')
     if not free.text == "Free!":
         url = "https://e-hentai.org/archiver.php?gid=3285545&token=7745b19f1e"
-        response = requests.get(url, cookies=eh_cookie)
+        response = requests.get(url, cookies=eh_cookie, proxies=proxies)
         soup = BeautifulSoup(response.text, 'html.parser')
         for x in soup.find_all('p'):
             if "GP" in x.text and "Credits" in x.text:
@@ -27,7 +30,9 @@ def detection(gid,token,clarity,use_gp):
                 if m_list[0] - use_gp < 0:
                     return False, f"GP不足，GP还剩余{[m_list[0]]}，C还剩余{[m_list[2]]}"
     if soup.find('a', onclick="return cancel_sessions()"):
-        if not refresh_url(gid=gid, token=token):
+        if refresh_url(gid=gid, token=token):
+            print("销毁成功")
+        else:    
             return False, "链接销毁失败"
 
     link = download_url(gid,token,clarity)
@@ -46,7 +51,7 @@ def download_url(gid,token,clarity):
         "dlcheck": f"Download {clarity} Archive",  # 按钮对应的名字和按钮值
     }
     arc_url = f"https://exhentai.org/archiver.php?gid={gid}&token={token}"
-    response = requests.post(arc_url, data=payload, cookies=eh_cookie)
+    response = requests.post(arc_url, data=payload, cookies=eh_cookie, proxies=proxies)
     # 对下载原始图像进行post请求
     if response.status_code == 200:
         logging.info("请求原始图像成功")
@@ -65,7 +70,7 @@ def refresh_url(gid, token):
         "invalidate_sessions": 1,
     }
     arc_url = f"https://exhentai.org/archiver.php?gid={gid}&token={token}"
-    response = requests.post(arc_url, data=payload, cookies=eh_cookie)
+    response = requests.post(arc_url, data=payload, cookies=eh_cookie, proxies=proxies)
     if response.status_code == 200:
         return True
     else:
@@ -112,9 +117,9 @@ def process_data():
 def status():
     data = request.get_json()
     if data["key"] == key:
-        ceshi = requests.get("https://exhentai.org", cookies=eh_cookie)
+        ceshi = requests.get("https://exhentai.org", cookies=eh_cookie, proxies=proxies)
         if ceshi.status_code == 200:
-            cc = requests.get("https://e-hentai.org/archiver.php?gid=3285402&token=9cf3194f42", cookies=eh_cookie)
+            cc = requests.get("https://e-hentai.org/archiver.php?gid=3285402&token=9cf3194f42", cookies=eh_cookie, proxies=proxies)
             if cc.status_code ==200:
                 soup = BeautifulSoup(cc.text, 'html.parser')
                 for x in soup.find_all('p'):

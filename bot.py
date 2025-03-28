@@ -1,4 +1,4 @@
-import requests, os, json, re, yaml
+import requests, os, json, re, yaml, random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters
 from main import addr_status, eh_page, eh_arc, arc_download
@@ -6,11 +6,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
 import aiomysql
+from io import BytesIO
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 bot_token = config['bot_token']
-
+proxies = config.get("proxy")
 # 定义命令列表
 COMMANDS = [
     BotCommand("start", "开始使用机器人"),
@@ -21,6 +22,11 @@ COMMANDS = [
     BotCommand("white_del", "id 移除白名单(多个用空格分隔)"),
     BotCommand("ban", "id 添加黑名单(多个用空格分隔)"),
     BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)")
+    BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)"),
+    BotCommand("del_client", "停用我的后端节点"),
+    BotCommand("start_client", "修改并启用后端节点"),
+    BotCommand("check_in", "签到"),
+    BotCommand("add_gp", "[用户id] [gp数量] 添加gp")
 ]
 
 tag_dict = {
@@ -128,7 +134,7 @@ async def tag_mysql(application):
         print("❌ 数据库未连接，无法增加tag！")
         return
     url = "https://api.github.com/repos/EhTagTranslation/Database/releases/latest"
-    response = requests.get(url)
+    response = requests.get(url, proxies=proxies)
     data = response.json()
     date = []
     async with db_pool.acquire() as conn:  # 获取连接
@@ -136,7 +142,7 @@ async def tag_mysql(application):
             for asset in data['assets']:
                 if asset['name'].endswith("db.text.json"):
                     download_url = asset['browser_download_url']
-                    response = requests.get(download_url)
+                    response = requests.get(download_url, proxies=proxies)
                     if response.status_code == 200:
                         # 解析 JSON 数据
                         db = response.json()
@@ -343,7 +349,7 @@ async def ehentai(update: Update, context: CallbackContext):
             await aaa.edit_text("请求网页错误，请联系管理员")
         elif result == 501:
             await aaa.edit_text("请求网页无内容，请联系管理员检查cookie")
-        elif len(result) == 2:
+        elif len(result) == 3:
             async with db_pool.acquire() as conn:  # 获取连接
                 async with conn.cursor() as cur:  # 创建游标
                     await cur.execute("SELECT * FROM tag_data WHERE tag = %s AND tag_type = %s", (result[1][2], "gallery_type"))
@@ -371,7 +377,8 @@ async def ehentai(update: Update, context: CallbackContext):
                         media=InputMediaPhoto(media=result[0], caption=caption, parse_mode="HTML"),
                         reply_markup=keyboard,
                         chat_id=chat_id,
-                        message_id=aaa.message_id,)
+                        message_id=aaa.message_id)
+        
 
 async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -563,7 +570,123 @@ async def server_list(update: Update, context: ContextTypes):
 async def help_(update: Update, context: ContextTypes):
     await update.message.reply_markdown(text=f"此bot为分布式eh归档链接获取bot\n基于[此项目](https://github.com/mhdy2233/tg-eh-distributed-arc-bot)制作")
 
-conversation_handler = ConversationHandler(
+async def del_client(update: Update, context: ContextTypes):
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM server_data WHERE user_id = %s", (update.message.from_user.id))  # 查询所有数据
+            result = await cur.fetchone()  # 获取查询结果
+            if not result:
+                await update.message.reply_text("您尚未添加后端节点")
+            elif result[8] == "off":
+                await update.message.reply_text("您的后端节点已停用")
+            else:
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击停用", callback_data=f"yes_del|{result[0]}")], [InlineKeyboardButton("取消", callback_data="cancel")]])
+                await update.message.reply_text(text="您确定要停用后端节点吗？", reply_markup=keyboard)
+
+async def start_client(update: Update, context: ContextTypes):
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM server_data WHERE user_id = %s", (update.message.from_user.id))  # 查询所有数据
+            result = await cur.fetchone()  # 获取查询结果
+            if not result:
+                await update.message.reply_text("您尚且没有后端节点，如果要添加请练习管理员获取白名单后使用 /join")
+            else:
+                context.user_data['token'] = result[5]
+                context.user_data['addr'] = result[4]
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("点击启用client", callback_data=f"yes_start|{result[0]}")],
+                    [InlineKeyboardButton("点击修改addr", callback_data="addr")],
+                    [InlineKeyboardButton("点击修改token", callback_data="token")]
+                ])
+                await update.message.reply_text(text=f"当前client信息如下：\naddr(地址)：{result[4]}\ntoken(key)：{result[5]}\n状态：{result[8]}", reply_markup=keyboard)
+
+async def addr_client(update: Update, context: ContextTypes):
+    query = update.callback_query
+    await query.answer()  # 关闭加载动画
+    await query.edit_message_text("请输入addr(地址)：\n/cancel 取消")
+    return "ssss"
+
+async def addr_client_yes(update: Update, context: ContextTypes):
+    url = update.message.text
+    if not url:
+        await update.message.reply_text("请输入addr(地址)...")
+        pass
+    else:
+        token = context.user_data['token']
+        status = await addr_status(url, token)
+        if status == 200:
+            async with db_pool.acquire() as conn:  # 获取连接
+                async with conn.cursor() as cur:  # 创建游标
+                    await cur.execute("UPDATE server_data SET addr = %s WHERE user_id = %s", (url, update.message.from_user.id))
+                    await update.message.reply_text(f"修改成功！\n当前addr(地址为)：{url}\ntoken(key)为：{token}")
+                    context.user_data.clear()
+                    return ConversationHandler.END
+        else:
+            await update.message.reply_text(status)
+            context.user_data.clear()
+            return ConversationHandler.END
+
+async def token_client(update: Update, context: ContextTypes):
+    query = update.callback_query
+    await query.answer()  # 关闭加载动画
+    await query.edit_message_text("请输入token(key)：\n/cancel 取消")
+    return "zzzz"
+
+async def token_client_yes(update: Update, context: ContextTypes):
+    token = update.message.text
+    if not token:
+        await update.message.reply_text("请输入token(key)...")
+        pass
+    else:
+        url = context.user_data['addr']
+        status = await addr_status(url, token)
+        if status == 200:
+            async with db_pool.acquire() as conn:  # 获取连接
+                async with conn.cursor() as cur:  # 创建游标
+                    await cur.execute("UPDATE server_data SET token = %s WHERE user_id = %s", (token, update.message.from_user.id))
+                    await update.message.reply_text(f"修改成功！\n当前addr(地址为)：{url}\ntoken(key)为：{token}")
+                    context.user_data.clear()
+                    return ConversationHandler.END
+        else:
+            await update.message.reply_text(status)
+            context.user_data.clear()
+            return ConversationHandler.END
+
+async def last_page(update: Update, context: ContextTypes):
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM logs ORDER BY id DESC LIMIT 5;")  # 查询最新的5条
+            result = await cur.fetchall()
+            captions = []
+            photos = []
+            for x in result:
+                photos.append(x[7])
+            b = 0
+            for x in result:
+                b += 1
+                if x[4]:
+                    captions.append(f"{b}. <a href='{x[6]}'>{x[4]}</a>")
+                elif x[5]:
+                    captions.append(f"{b}. <a href='{x[6]}'>{x[5]}</a>")
+            media_group = [
+                InputMediaPhoto(media=photo, caption=caption, parse_mode='HTML') 
+                for photo, caption in zip(photos, captions)
+            ]
+            await update.message.reply_media_group(media=media_group)
+
+join_handler = ConversationHandler(
     entry_points=[CommandHandler('join', join_addr)],  # 用户输入 /start 指令时进入对话
     states={
         "join_0": [MessageHandler(filters.TEXT & ~filters.COMMAND, join_0)],  # 等待文本输入
@@ -588,6 +711,9 @@ def main():
     app.add_handler(CommandHandler("ban_del", ban_del))
     app.add_handler(CommandHandler("server_list", server_list))
     app.add_handler(CommandHandler("help", help_))
+    app.add_handler(CommandHandler("del_client", del_client))
+    app.add_handler(CommandHandler("start_client", start_client))
+    app.add_handler(CommandHandler("last_page", last_page))
 
     app.add_handler(conversation_handler)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ehentai))

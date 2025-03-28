@@ -15,3 +15,7 @@ mysql:
   user: "root"       # MySQL 用户名
   password: "password"  # MySQL 密码
   db: "eh_arc" # 数据库名称
+
+proxy:
+  # http: "http://127.0.0.1:8080"
+  # https: "http://127.0.0.1:8080"
