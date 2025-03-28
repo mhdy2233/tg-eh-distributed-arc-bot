@@ -471,7 +471,7 @@ async def button_callback(update: Update, context: CallbackContext):
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE server_data SET enable = %s WHERE id = %s", ("on", data[1]))
                 await context.bot.send_message(chat_id=query.message.chat.id, text="启用成功")
-    elif data == "cancel":
+    elif data[0] == "cancel":
         await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
 
 async def status_task(context: CallbackContext) -> None:
@@ -615,7 +615,7 @@ async def del_client(update: Update, context: ContextTypes):
             elif result[8] == "off":
                 await update.message.reply_text("您的后端节点已停用")
             else:
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击停用", callback_data=["yes_del", result[0]])], [InlineKeyboardButton("取消", callback_data="cancel")]])
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击停用", callback_data=f"yes_del|{result[0]}")], [InlineKeyboardButton("取消", callback_data="cancel")]])
                 await update.message.reply_text(text="您确定要停用后端节点吗？", reply_markup=keyboard)
 
 async def start_client(update: Update, context: ContextTypes):
@@ -633,7 +633,7 @@ async def start_client(update: Update, context: ContextTypes):
                 context.user_data['token'] = result[5]
                 context.user_data['addr'] = result[4]
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("点击启用client", callback_data=["yes_start", result[0]])],
+                    [InlineKeyboardButton("点击启用client", callback_data=f"yes_start|{result[0]}")],
                     [InlineKeyboardButton("点击修改addr", callback_data="addr")],
                     [InlineKeyboardButton("点击修改token", callback_data="token")]
                 ])
