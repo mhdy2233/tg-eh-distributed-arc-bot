@@ -52,7 +52,6 @@ async def addr_status(addr,token):
 async def eh_page(gid, token):
     eh_cookie = random.choice(config['eh_cookies'])
     url = "https://exhentai.org/g/" + str(gid) + "/" + str(token)
-    print(url)
     eh = requests.get(url, cookies=eh_cookie)
     if eh.status_code == 200:
         if eh.text == "Key missing, or incorrect key provided.":
@@ -60,7 +59,10 @@ async def eh_page(gid, token):
         soup = BeautifulSoup(eh.text, 'html.parser')
         if not soup:
             return 501
-        image_url = obtain_cover(eh.text)  # 获取画廊封面数据
+        image = obtain_cover(eh.text)  # 获取画廊封面数据 
+        match = re.search(r'url\((https?://[^\s)]+)\)', soup.find("div", style=re.compile(r'url\((.*?)\)'))['style'])
+        if match:
+            image_url = match.group(1)
         title1 = soup.find('h1', id='gn').text   # 主标题
         title2 = soup.find('h1', id='gj').text   # 副标题
         page_type = soup.find('div', id='gdc').text.lower()  # 画廊类型
@@ -78,7 +80,7 @@ async def eh_page(gid, token):
             b = tag_type + tags
             labels.append(b)
         caption = [title1, title2, page_type, uploader, posted, language, size, pages, favorited, average, labels]
-        return image_url, caption
+        return image, caption, image_url
     elif eh.status_code == 403:
         return 403
     else:
