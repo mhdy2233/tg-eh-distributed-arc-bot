@@ -213,7 +213,7 @@ async def start(update: Update, context: CallbackContext):
             black_list = json.load(f)
     else:
         black_list = []
-    if update.message.from_user.id in black_list:
+    if str(update.message.from_user.id) in black_list:
         await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
         return
     global db_pool
@@ -242,7 +242,7 @@ async def join_addr(update: Update, context: CallbackContext):
             black_list = json.load(f)
     else:
         black_list = []
-    if update.message.from_user.id in black_list:
+    if str(update.message.from_user.id) in black_list:
         await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
         return
     if os.path.exists("./white.json"):
@@ -250,7 +250,7 @@ async def join_addr(update: Update, context: CallbackContext):
             white_list = json.load(f)
     else:
         white_list = []
-    if not update.message.from_user.id in black_list:
+    if not str(update.message.from_user.id) in white_list:
         await update.message.reply_text("请先联系管理员添加白名单")
         return
     global db_pool
@@ -324,7 +324,7 @@ async def cancel(update: Update, context: CallbackContext):
             black_list = json.load(f)
     else:
         black_list = []
-    if update.message.from_user.id in black_list:
+    if str(update.message.from_user.id) in black_list:
         await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
         return
     context.user_data.clear()
@@ -342,7 +342,7 @@ async def ehentai(update: Update, context: CallbackContext):
             black_list = json.load(f)
     else:
         black_list = []
-    if update.message.from_user.id in black_list:
+    if str(update.message.from_user.id) in black_list:
         await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
         return
     pattern = r"(e-hentai|exhentai)"
