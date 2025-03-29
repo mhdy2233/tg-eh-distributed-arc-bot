@@ -1,10 +1,10 @@
-import yaml, requests, random, re, io
+import yaml, requests, random, re, io, json
 from bs4 import BeautifulSoup
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
-def obtain_cover(eh_text):
+def obtain_cover(img_url):
     """获取画廊封面
 
     Args:
@@ -13,20 +13,13 @@ def obtain_cover(eh_text):
     Returns:
         _type_: _description_
     """
-    soup = BeautifulSoup(eh_text, 'html.parser')
-    div = soup.find("div", style=re.compile(r'url\((.*?)\)'))  
-    match = re.search(r'url\((https?://[^\s)]+)\)', div['style'])
-    if match:
-        img_url = match.group(1)
-        response = requests.get(img_url, cookies=random.choice(config['eh_cookies']))
-    
-        if response.status_code == 200:
-            # 将图片数据保存到内存中的 BytesIO 对象
-            img_data = io.BytesIO(response.content)
-            img_data.seek(0)  # 将游标重置到文件开头
-        return img_data
-    else:
-        return False
+    response = requests.get(img_url, cookies=random.choice(config['eh_cookies']))
+
+    if response.status_code == 200:
+        # 将图片数据保存到内存中的 BytesIO 对象
+        img_data = io.BytesIO(response.content)
+        img_data.seek(0)  # 将游标重置到文件开头
+    return img_data
 
 async def addr_status(addr,token):
     data = {
@@ -60,7 +53,10 @@ async def eh_page(gid, token):
         soup = BeautifulSoup(eh.text, 'html.parser')
         if not soup:
             return 501
-        image_url = obtain_cover(eh.text)  # 获取画廊封面数据
+        match = re.search(r'url\((https?://[^\s)]+)\)', soup.find("div", style=re.compile(r'url\((.*?)\)'))['style'])
+        if match:
+            img_url = match.group(1)
+        image = obtain_cover(img_url)  # 获取画廊封面数据
         title1 = soup.find('h1', id='gn').text   # 主标题
         title2 = soup.find('h1', id='gj').text   # 副标题
         page_type = soup.find('div', id='gdc').text.lower()  # 画廊类型
@@ -78,7 +74,7 @@ async def eh_page(gid, token):
             b = tag_type + tags
             labels.append(b)
         caption = [title1, title2, page_type, uploader, posted, language, size, pages, favorited, average, labels]
-        return image_url, caption
+        return image, caption, img_url
     elif eh.status_code == 403:
         return 403
     else:
@@ -146,4 +142,17 @@ def arc_download(addr, key, gid, token, clarity, use_gp):
         else:
             return True, link
         
-        
+async def eh_meta(gid, token):
+    api = "https://exhentai.org/api.php"
+    data = {
+    "method": "gdata",
+    "gidlist": [
+        [gid,token]
+    ],
+    "namespace": 1
+    }
+    meta = requests.post(url=api, json=data, cookies=random.choice(config['eh_cookies']))
+    # 将 JSON 转换为字符串，并写入 BytesIO 内存流
+    json_bytes = io.BytesIO(json.dumps(meta.json(), indent=4, ensure_ascii=False).encode("utf-8"))
+    json_bytes.name = f"{gid}.json"  # 设置文件名，Telegram 需要这个
+    return json_bytes

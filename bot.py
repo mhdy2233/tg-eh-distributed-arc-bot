@@ -1,7 +1,7 @@
 import requests, os, json, re, yaml, random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, Bot
 from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters
-from main import addr_status, eh_page, eh_arc, arc_download
+from main import addr_status, eh_page, eh_arc, arc_download, eh_meta
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
@@ -259,13 +259,6 @@ async def join_addr(update: Update, context: CallbackContext):
         pass
     user_id = update.message.from_user.id
     username = update.message.from_user.username
-    if os.path.exists("./white.json"):
-        with open("./white.json", 'r', encoding='utf-8') as f:
-            white_list = json.load(f)
-    else:
-        white_list = []
-    if not user_id in white_list:
-        return ConversationHandler.END
     async with db_pool.acquire() as conn:  # 获取连接
         async with conn.cursor() as cur:  # 创建游标
             await cur.execute("SELECT * FROM server_data WHERE user_id = %s", (user_id,))
@@ -311,11 +304,9 @@ async def join_1(update: Update, context: CallbackContext):
                     await cur.execute("INSERT INTO server_data (created_time, user_id, username, addr, token, status, gp_status, enable) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, context.user_data['user_id'], context.user_data['username'], addr, token, "active", "active", "on"))
                     inserted_id = cur.lastrowid
                     await update.message.reply_text(f"恭喜添加成功！\n用户id：{context.user_data['user_id']}\n编号：{inserted_id}\n地址：{context.user_data['addr']}\n密钥：{token}")
-                    context.user_data.clear()
                     return ConversationHandler.END
         else:
             await update.message.reply_text(status)
-            context.user_data.clear()
             return ConversationHandler.END
 
 async def cancel(update: Update, context: CallbackContext):
@@ -327,7 +318,6 @@ async def cancel(update: Update, context: CallbackContext):
     if str(update.message.from_user.id) in black_list:
         await update.message.reply_text("你已被添加黑名单，如果这是个错误请联系管理员")
         return
-    context.user_data.clear()
     await update.message.reply_text("已取消操作")
     return ConversationHandler.END
 
@@ -351,10 +341,11 @@ async def ehentai(update: Update, context: CallbackContext):
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
         urls = urlparse(update.message.text).path.strip("/").split("/")
-        if not len(urls) == 3:
-            pass
         gid, token = urls[1], urls[2]
         aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
+        if not len(urls) == 3:
+            await aaa.edit_text("链接错误")
+            return
         result = await eh_page(gid,token)
         if result == 400:
             await aaa.edit_text("画廊链接错误请检查")
@@ -385,7 +376,7 @@ async def ehentai(update: Update, context: CallbackContext):
                         tag = ' '.join([f"#{word}" for word in x[1:]])
                         tagg = tagg + x[0] + "：" + tag + "\n"
                     caption = f"主标题：{result[1][0]}\n副标题：{result[1][1]}\n画廊类型：{page_type}\n上传者：{result[1][3]}\n上传时间：{result[1][4]}\n语言：{language}\n画廊大小：{result[1][6]}\n页数：{result[1][7]}\n收藏数：{result[1][8]}\n评分：{result[1][9]}\n\n{tagg}"
-                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("跳转画廊", url=url), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")]])
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")]])
                     context.user_data['主标题'] = result[1][0]
                     context.user_data['副标题'] = result[1][1]
                     context.user_data['image'] = result[2]
@@ -422,7 +413,7 @@ async def button_callback(update: Update, context: CallbackContext):
                     await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n{message}\n剩余GP：***{gp}***", parse_mode="Markdown", reply_markup=keyboard)
                 else:
                     await context.bot.send_message(chat_id=query.message.chat.id, text="请先使用 /start 录入用户数据")
-                    context.user_data.clear()
+                    
     elif data[0] == 'original' or data[0] == 'resample':
         gid, token, use_gp = data[1], data[2], data[3]
         if not db_pool:
@@ -458,7 +449,6 @@ async def button_callback(update: Update, context: CallbackContext):
                             else:
                                 await cur.execute("UPDATE server_data SET status = %s WHERE user_id = %s", ("inactive", server_user_id))
                             await context.bot.send_message(chat_id=server_user_id, text=link[1])
-        context.user_data.clear()
     elif data[0] == "yes_del":
         if not db_pool:
             print("❌ 数据库未连接！")
@@ -477,6 +467,11 @@ async def button_callback(update: Update, context: CallbackContext):
                 await context.bot.send_message(chat_id=query.message.chat.id, text="启用成功")
     elif data[0] == "cancel":
         await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+    elif data[0] == "json":
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("归档下载", callback_data=f"arc|{data[1]}|{data[2]}")]])
+        await query.edit_message_reply_markup(reply_markup=keyboard)
+        meta_json = await eh_meta(data[1], data[2])
+        await context.bot.send_document(chat_id=query.message.chat_id, document=meta_json, caption=f"画廊链接为：https://exhentai.org/g/{data[1]}/{data[2]}", reply_to_message_id=query.message.message_id)
 
 async def status_task(context: CallbackContext) -> None:
     """定时任务"""
@@ -662,11 +657,9 @@ async def addr_client_yes(update: Update, context: ContextTypes):
                 async with conn.cursor() as cur:  # 创建游标
                     await cur.execute("UPDATE server_data SET addr = %s WHERE user_id = %s", (url, update.message.from_user.id))
                     await update.message.reply_text(f"修改成功！\n当前addr(地址为)：{url}\ntoken(key)为：{token}")
-                    context.user_data.clear()
                     return ConversationHandler.END
         else:
             await update.message.reply_text(status)
-            context.user_data.clear()
             return ConversationHandler.END
 
 async def token_client(update: Update, context: ContextTypes):
@@ -688,11 +681,9 @@ async def token_client_yes(update: Update, context: ContextTypes):
                 async with conn.cursor() as cur:  # 创建游标
                     await cur.execute("UPDATE server_data SET token = %s WHERE user_id = %s", (token, update.message.from_user.id))
                     await update.message.reply_text(f"修改成功！\n当前addr(地址为)：{url}\ntoken(key)为：{token}")
-                    context.user_data.clear()
                     return ConversationHandler.END
         else:
             await update.message.reply_text(status)
-            context.user_data.clear()
             return ConversationHandler.END
 
 async def last_page(update: Update, context: ContextTypes):
