@@ -289,9 +289,9 @@ async def start(update: Update, context: CallbackContext):
     user_name = update.message.from_user.username
     args = context.args
     if args:
-        gid, token = args[0].split("|")[0], args[0].split("|")[1]
+        gid, token = args[0].split("_")[0], args[0].split("_")[1]
         aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
-        cs = page(gid=gid, token=token, update=update, context=context)
+        cs = await page(gid=gid, token=token, context=context)
         if len(cs) == 4:
             await context.bot.edit_message_media(
                 media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML"),
@@ -839,7 +839,7 @@ async def inline_query(update: Update, context: CallbackContext):
                 if len(cs) == 4:
                     keyboard = InlineKeyboardMarkup([
                         [InlineKeyboardButton("点击跳转画廊", url=url)],
-                        [InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}|{token}")]
+                        [InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
                     ])
                     results = [
                         InlineQueryResultPhoto(
