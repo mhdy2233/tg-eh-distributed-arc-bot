@@ -5,7 +5,12 @@ from flask_cors import CORS
 
 key = "1234"
 port = 11451
-eh_cookie = {"ipb_member_id": "", "ipb_pass_hash": "", "igneous": ""}
+eh_cookie = {
+    "ipb_member_id": "",
+    "ipb_pass_hash": "",
+    "igneous": ""
+}
+
 proxies = {
     # 不用的时候就#
     # "http": "http://127.0.0.1:8080",
