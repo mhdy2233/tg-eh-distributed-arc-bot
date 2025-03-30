@@ -1,19 +1,20 @@
-bot_token: ''
-
-gm_list: [] # 管理员列表
+bot_token: '7980824796:AAHl5Oga-sm8U5rG9vVhi-pA1Cl8iqGzfuU' # bot token
+bot_username: "tudou_ceshi_bot" # bot用户名，去除@
+my_chat: "" # 公开频道的用户名，bot需为频道管理员
+gm_list: [7746079841] # 管理员列表
 
 eh_cookies: [{  # eh_cookie可以为多个，请使用里站cookie，如果你的网络可以直接更新里站cookie那么igneous可以不填写。
-  ipb_member_id: "",
-  ipb_pass_hash: "",
-  igneous: "",
+  ipb_member_id: "7405455",
+  ipb_pass_hash: "8626a2f1efa51a6b0fd464145e32cea7",
+  igneous: "t9oudjacirr4jd1gf",
   }
 ]
 
 mysql:
-  host: "localhost"  # MySQL 地址
+  host: "77.90.41.131"  # MySQL 地址
   prot: 3306         # MySQL 端口
   user: "root"       # MySQL 用户名
-  password: "password"  # MySQL 密码
+  password: "mhdy2233"  # MySQL 密码
   db: "eh_arc" # 数据库名称
 
 proxy:
