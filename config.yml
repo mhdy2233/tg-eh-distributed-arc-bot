@@ -1,5 +1,6 @@
-bot_token: ''
-
+bot_token: '' # bot token
+bot_username: "" # bot用户名，去除@
+my_chat: "" # 公开频道的用户名，bot需为频道管理员
 gm_list: [] # 管理员列表
 
 eh_cookies: [{  # eh_cookie可以为多个，请使用里站cookie，如果你的网络可以直接更新里站cookie那么igneous可以不填写。
@@ -10,10 +11,10 @@ eh_cookies: [{  # eh_cookie可以为多个，请使用里站cookie，如果你�
 ]
 
 mysql:
-  host: "localhost"  # MySQL 地址
+  host: "127.0.0.1"  # MySQL 地址
   prot: 3306         # MySQL 端口
   user: "root"       # MySQL 用户名
-  password: "password"  # MySQL 密码
+  password: "root"  # MySQL 密码
   db: "eh_arc" # 数据库名称
 
 proxy:
