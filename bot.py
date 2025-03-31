@@ -443,7 +443,7 @@ async def ehentai(update: Update, context: CallbackContext):
                 media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML", has_spoiler=has_spoiler),
                 reply_markup=keyboard,
                 chat_id=chat_id,
-                message_id=aaa.message_id
+                message_id=aaa.message_id,
                 )
         else:
             await aaa.edit_text(cs)
@@ -503,7 +503,7 @@ async def button_callback(update: Update, context: CallbackContext):
                             shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
                             await cur.execute("UPDATE user_data SET user_gp = %s, use_gps = %s, use_num = %s, use_time = %s WHERE user_id = %s", (remnant_gp, user_data[5] + int(use_gp), user_data[6] + 1, shanghai_time, query.from_user.id))
                             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
-                            await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard)
+                            await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard, disable_web_page_preview=True)
                             await cur.execute("UPDATE server_data SET use_gps = %s WHERE user_id = %s", (result[9] + int(use_gp), server_user_id))
                             await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], query.from_user.id, context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp) ))
                             break
@@ -831,7 +831,7 @@ async def check_in(update: Update, context: ContextTypes):
             else:
                 random_number = random.randint(15000, 40000)
                 await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (random_number + result[4], update.message.from_user.id))
-                await update.message.reply_text(f"签到成功！\n获得{random_number}GP")
+                await update.message.reply_text(f"签到成功！\n获得**{random_number}**GP\n当前有**{random_number + result[4]}**GP", parse_mode='Markdown')
 
 async def add_gp(update: Update, context: ContextTypes):
     args = context.args
