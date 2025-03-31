@@ -2,7 +2,7 @@ import requests, os, json, re, yaml, random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto
 from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters, InlineQueryHandler
 from main import addr_status, eh_page, eh_arc, arc_download, eh_meta
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
 import aiomysql
@@ -17,18 +17,19 @@ my_chat = config['my_chat']
 # 定义命令列表
 COMMANDS = [
     BotCommand("start", "开始使用机器人"),
+    BotCommand("check_in", "签到"),
+    BotCommand("popular", "获取最近一周最热门的5个"),
+    BotCommand("last_page", "查看最新下载的5个画廊"),
+    BotCommand("server_list", "查看后端列表"),
     BotCommand("help", "获取帮助信息"),
     BotCommand("join", "添加节点"),
-    BotCommand("server_list", "查看后端列表"),
-    BotCommand("last_page", "查看最新下载的5个画廊"),
     BotCommand("white_add", "id 添加白名单(多个用空格分隔)"),
     BotCommand("white_del", "id 移除白名单(多个用空格分隔)"),
     BotCommand("ban", "id 添加黑名单(多个用空格分隔)"),
     BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)"),
     BotCommand("del_client", "停用我的后端节点"),
     BotCommand("start_client", "修改并启用后端节点"),
-    BotCommand("check_in", "签到"),
-    BotCommand("add_gp", "[用户id] [gp数量] 添加gp")
+    BotCommand("add_gp", "[用户id] [gp数量] 添加gp"),
 ]
 
 tag_dict = {
@@ -407,7 +408,7 @@ async def ehentai(update: Update, context: CallbackContext):
     if not db_pool:
         print("❌ 数据库未连接！")
         pass
-    chat_id = update.message.from_user.id
+    chat_id = update.message.chat_id
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
             black_list = json.load(f)
@@ -429,11 +430,21 @@ async def ehentai(update: Update, context: CallbackContext):
             return
         cs = await page(gid=gid, token=token, context=context)
         if len(cs) == 4:
+            if update.message.chat.type == "private":
+                keyboard = cs[2]
+                has_spoiler=False
+            elif update.message.chat.type == "supergroup" or update.message.chat.type == "group":
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("点击跳转画廊", url=url)],
+                    [InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
+                    ])
+                has_spoiler=True
             await context.bot.edit_message_media(
-                media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML"),
-                reply_markup=cs[2],
+                media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML", has_spoiler=has_spoiler),
+                reply_markup=keyboard,
                 chat_id=chat_id,
-                message_id=aaa.message_id)
+                message_id=aaa.message_id
+                )
         else:
             await aaa.edit_text(cs)
 
@@ -758,13 +769,52 @@ async def last_page(update: Update, context: ContextTypes):
                     b += 1
                     z = str(x[6]).split("|")
                     if x[4]:
-                        captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[4]}</a>")
+                        captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[4]}</a>\n\n<a href='https://t.me/{bot_username}?start={z[0]}_{z[1]}'>在bot中打开</a>")
                     elif x[5]:
-                        captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[5]}</a>")
+                        captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[5]}</a>\n\n<a href='https://t.me/{bot_username}?start={z[0]}_{z[1]}'>在bot中打开</a>")
                 for x, caption in zip(result, captions):
-                    nsk = await page(gid=z[0], token=z[1], context=context)
-                    if len(nsk) == 4:
-                        media_group.append(InputMediaPhoto(media=nsk[0], caption=caption, parse_mode='HTML'))
+                    await cur.execute("SELECT * FROM message WHERE gid = %s", (z[0]))
+                    result_ = await cur.fetchone()  # 获取查询结果（单条数据）
+                    if result_:
+                        media_group.append(InputMediaPhoto(media=result_[4], caption=caption, parse_mode='HTML'))
+                await update.message.reply_media_group(media=media_group)
+
+async def popular(update: Update, context: ContextTypes):
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            shanghai_time = datetime.now()
+            seven_days_ago = shanghai_time - timedelta(days=7)
+            await cur.execute("""
+                SELECT url, title1, title2, COUNT(*) AS count 
+                FROM logs 
+                WHERE time >= %s 
+                GROUP BY url, title1, title2
+                ORDER BY count DESC 
+                LIMIT 5;
+            """, (seven_days_ago,))
+            result = await cur.fetchall()
+            if not result:
+                await update.message.reply_text("没有画廊")
+            else:
+                captions = []
+                media_group = []
+                b = 0
+                for x in result:
+                    b += 1
+                    z = str(x[0]).split("|")
+                    if x[1]:
+                        captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[1]}</a>\n\n<a href='https://t.me/{bot_username}?start={z[0]}_{z[1]}'>在bot中打开</a>")
+                    elif x[2]:
+                        captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[2]}</a>\n\n<a href='https://t.me/{bot_username}?start={z[0]}_{z[1]}'>在bot中打开</a>")
+                for x, caption in zip(result, captions):
+                    await cur.execute("SELECT * FROM message WHERE gid = %s", (str(x[0]).split("|")[0]))
+                    result_ = await cur.fetchone()  # 获取查询结果（单条数据）
+                    if result_:
+                        media_group.append(InputMediaPhoto(media=result_[4], caption=caption, parse_mode='HTML'))
                 await update.message.reply_media_group(media=media_group)
 
 async def check_in(update: Update, context: ContextTypes):
@@ -891,16 +941,17 @@ def main():
 
     # 添加命令处理器
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("check_in", check_in))
+    app.add_handler(CommandHandler("last_page", last_page))
+    app.add_handler(CommandHandler("popular", popular))
+    app.add_handler(CommandHandler("server_list", server_list))
     app.add_handler(CommandHandler("white_add", white_add))
     app.add_handler(CommandHandler("white_del", white_del))
     app.add_handler(CommandHandler("ban", ban_add))
     app.add_handler(CommandHandler("ban_del", ban_del))
-    app.add_handler(CommandHandler("server_list", server_list))
     app.add_handler(CommandHandler("help", help_))
     app.add_handler(CommandHandler("del_client", del_client))
     app.add_handler(CommandHandler("start_client", start_client))
-    app.add_handler(CommandHandler("last_page", last_page))
-    app.add_handler(CommandHandler("check_in", check_in))
     app.add_handler(CommandHandler("add_gp", add_gp))
 
     app.add_handler(join_handler)
