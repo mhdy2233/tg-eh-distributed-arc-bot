@@ -1,12 +1,13 @@
-import requests, os, json, re, yaml, random
+import requests, os, json, re, yaml, random, io
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto
 from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters, InlineQueryHandler
-from main import addr_status, eh_page, eh_arc, arc_download, eh_meta
+from main import addr_status, eh_page, eh_arc, arc_download, eh_meta, eh_page_meta
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
 import aiomysql
 import uuid
+from collections import defaultdict
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
@@ -196,7 +197,7 @@ async def tag_mysql(application):
                             b += 1
                         print("tag增加完成")
 
-async def get_translations(english_words):
+async def get_translations(b, english_words):
     # 确保英文字词列表不为空
     if not english_words:
         return []
@@ -206,19 +207,32 @@ async def get_translations(english_words):
         return
     async with db_pool.acquire() as conn:
         async with conn.cursor() as cur:
-            china = []
-            for x in english_words:
-                placeholders = ', '.join(['%s'] * len(x[1:]))
-                # 使用 IN 子句进行批量查询
-                query = f"SELECT * FROM tag_data WHERE tag IN ({placeholders}) AND tag_type = %s"
-                await cur.execute(query, (*x[1:], x[0]))  # 使用*tags解包列表
-                result = await cur.fetchall()  # 获取查询结果
-                b = [tag_tra_dict[x[0]]]
-                # 创建一个字典存储查询结果（英文 -> 中文），如果没有找到中文翻译，默认返回英文
-                translation_dict = {row[1]: row[2] for row in result}
-                z = b + [translation_dict.get(word, word) for word in x[1:]]  # 如果没有翻译，返回英文单词本身
-                china.append(z)
-            return china
+            if b == "page":
+                china = []
+                for x in english_words:
+                    placeholders = ', '.join(['%s'] * len(x[1:]))
+                    # 使用 IN 子句进行批量查询
+                    query = f"SELECT * FROM tag_data WHERE tag IN ({placeholders}) AND tag_type = %s"
+                    await cur.execute(query, (*x[1:], x[0]))  # 使用*tags解包列表
+                    result = await cur.fetchall()  # 获取查询结果
+                    b = [tag_tra_dict[x[0]]]
+                    # 创建一个字典存储查询结果（英文 -> 中文），如果没有找到中文翻译，默认返回英文
+                    translation_dict = {row[1]: row[2] for row in result}
+                    z = b + [translation_dict.get(word, word) for word in x[1:]]  # 如果没有翻译，返回英文单词本身
+                    china.append(z)
+                return china
+            elif b == "meta":
+                tags_dict = defaultdict(list)
+                for tag_and_type in english_words:
+                    tag_list = tag_and_type.split(":")
+                    await cur.execute("SELECT * FROM tag_data WHERE tag = %s AND tag_type = %s", (tag_list[1], tag_list[0]))
+                    result = await cur.fetchone()  # 获取查询结果
+                    if result:
+                        tags_dict[tag_tra_dict[result[0]]].append(result[2])
+                    else:
+                        tags_dict[tag_tra_dict[tag_list[0]]].append(tag_list[1])
+                return dict(tags_dict)
+
 
 async def page(gid, token, context):
     global db_pool
@@ -235,6 +249,27 @@ async def page(gid, token, context):
                 return "请求网页错误，请联系管理员"
             elif result == 501:
                 return "请求网页无内容，请联系管理员检查cookie"
+            elif result == 404:
+                page_meta = await eh_page_meta(gid, token)
+                if page_meta == 500:
+                    return "画廊不存在"
+                await cur.execute("SELECT * FROM tag_data WHERE tag = %s AND tag_type = %s", (page_meta[1][2], "gallery_type"))
+                page_type = await cur.fetchone()  # 获取查询结果（单条数据）
+                if not page_type:
+                    page_type = page_meta[1][2]
+                else:
+                    page_type = page_type[2]
+                tagg = ""
+                tagg_dict = await get_translations("meta", page_meta[1][8])
+                for key, value in tagg_dict.items():
+                    tagg = tagg + key + "： #" + ' #'.join(value) + "\n"
+                caption = f"主标题：{page_meta[1][0]}\n副标题：{page_meta[1][1]}\n画廊类型：{page_type}\n上传者：{page_meta[1][3]}\n上传时间：{page_meta[1][4]}\n画廊大小：{page_meta[1][5]}\n页数：{page_meta[1][6]}\n评分：{page_meta[1][7]}\n\n{tagg}"
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}")]])
+                context.user_data['主标题'] = page_meta[1][0]
+                context.user_data['副标题'] = page_meta[1][1]
+                context.user_data['image'] = page_meta[0]
+                photo = page_meta[0]
+                title = page_meta[1][0]
             elif len(result) == 3:
                 await cur.execute("SELECT * FROM tag_data WHERE tag = %s AND tag_type = %s", (result[1][2], "gallery_type"))
                 page_type = await cur.fetchone()  # 获取查询结果（单条数据）
@@ -248,7 +283,7 @@ async def page(gid, token, context):
                     language = result[1][5]
                 else:
                     language = language[2]
-                tags = await get_translations(result[1][10])
+                tags = await get_translations("page", result[1][10])
                 tagg = ""
                 for x in tags:
                     tag = ' '.join([f"#{word}" for word in x[1:]])
@@ -258,20 +293,22 @@ async def page(gid, token, context):
                 context.user_data['主标题'] = result[1][0]
                 context.user_data['副标题'] = result[1][1]
                 context.user_data['image'] = result[2]
+                photo = result[0]
+                title = result[1][0]
             if not result_:
                 tg = await context.bot.send_photo(
                     chat_id=my_chat,  # 目标聊天 ID
-                    photo=result[0],  # 图片文件或图片 URL
+                    photo=photo,  # 图片文件或图片 URL
                     caption=caption,  # 图片的标题
                     parse_mode="HTML",  # 设置解析模式为 HTML
                     reply_markup=keyboard  # 回复键盘
                     )
                 file_id = tg.photo[-1].file_id
-                await cur.execute("INSERT INTO message (gid, title, message_id, file_id) VALUES (%s, %s, %s, %s)", (gid, result[1][0], tg.message_id, file_id))
-                return file_id, caption, keyboard, result[1][0]
+                await cur.execute("INSERT INTO message (gid, title, message_id, file_id) VALUES (%s, %s, %s, %s)", (gid, title, tg.message_id, file_id))
+                return file_id, caption, keyboard, title
             else:
                 file_id = result_[4]
-                return file_id, caption, keyboard, result[1][0]
+                return file_id, caption, keyboard, title
             
 async def start(update: Update, context: CallbackContext):
     if os.path.exists("./black.json"):
@@ -435,8 +472,9 @@ async def ehentai(update: Update, context: CallbackContext):
                 has_spoiler=False
             elif update.message.chat.type == "supergroup" or update.message.chat.type == "group":
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("点击跳转画廊", url=url)],
-                    [InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
+                    [InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}")], 
+                    [InlineKeyboardButton("点击跳转画廊", url=url),
+                    InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
                     ])
                 has_spoiler=True
             await context.bot.edit_message_media(
@@ -445,11 +483,13 @@ async def ehentai(update: Update, context: CallbackContext):
                 chat_id=chat_id,
                 message_id=aaa.message_id,
                 )
-        else:
+        elif len(cs) == 1:
             await aaa.edit_text(cs)
 
 async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
+    keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
+    clicked_text = query.data
     await query.answer()
     chat = await context.bot.get_chat(my_chat)
     if query.message.chat.id == chat.id:
@@ -460,6 +500,18 @@ async def button_callback(update: Update, context: CallbackContext):
         print("❌ 数据库未连接！")
         pass
     if data[0] == 'arc':
+        # 移除该按钮
+        new_keyboard = []
+        for row in keyboard:
+            new_row = [button for button in row if button.callback_data != clicked_text]
+            if new_row:  # 只保留仍有按钮的行
+                new_keyboard.append(new_row)
+
+        # 更新键盘，如果键盘为空，则删除键盘
+        if new_keyboard:
+            await query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+        else:
+            await query.message.edit_reply_markup(reply_markup=None)  # 删除键盘
         arc = eh_arc(data[1], data[2])
         if arc == "该画廊目前不可用":
             await context.bot.send_message(chat_id=query.message.chat.id, text="该画廊目前不可用")
@@ -480,6 +532,7 @@ async def button_callback(update: Update, context: CallbackContext):
                     
     elif data[0] == 'original' or data[0] == 'resample':
         gid, token, use_gp = data[1], data[2], data[3]
+        await query.message.edit_reply_markup(reply_markup=None)  # 移除键盘
         if not db_pool:
             print("❌ 数据库未连接，无法增加用户数据！")
         async with db_pool.acquire() as conn:  # 获取连接
@@ -503,7 +556,7 @@ async def button_callback(update: Update, context: CallbackContext):
                             shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
                             await cur.execute("UPDATE user_data SET user_gp = %s, use_gps = %s, use_num = %s, use_time = %s WHERE user_id = %s", (remnant_gp, user_data[5] + int(use_gp), user_data[6] + 1, shanghai_time, query.from_user.id))
                             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
-                            await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard, disable_web_page_preview=True)
+                            await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard, disable_web_page_preview=True, reply_to_message_id=query.message.message_id)
                             await cur.execute("UPDATE server_data SET use_gps = %s WHERE user_id = %s", (result[9] + int(use_gp), server_user_id))
                             await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], query.from_user.id, context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp) ))
                             break
@@ -532,10 +585,22 @@ async def button_callback(update: Update, context: CallbackContext):
     elif data[0] == "cancel":
         await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
     elif data[0] == "json":
-        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("归档下载", callback_data=f"arc|{data[1]}|{data[2]}")]])
-        await query.edit_message_reply_markup(reply_markup=keyboard)
-        meta_json = await eh_meta(data[1], data[2])
-        await context.bot.send_document(chat_id=query.message.chat_id, document=meta_json, caption=f"画廊链接为：https://exhentai.org/g/{data[1]}/{data[2]}", reply_to_message_id=query.message.message_id)
+        # 移除该按钮
+        new_keyboard = []
+        for row in keyboard:
+            new_row = [button for button in row if button.callback_data != clicked_text]
+            if new_row:  # 只保留仍有按钮的行
+                new_keyboard.append(new_row)
+
+        # 更新键盘，如果键盘为空，则删除键盘
+        if new_keyboard:
+            await query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+        else:
+            await query.message.edit_reply_markup(reply_markup=None)  # 删除键盘
+        meta = await eh_meta(data[1], data[2])
+        json_bytes = io.BytesIO(json.dumps(meta, indent=4, ensure_ascii=False).encode("utf-8"))
+        json_bytes.name = f"{data[1]}.json"  # 设置文件名，Telegram 需要这个
+        await context.bot.send_document(chat_id=query.message.chat_id, document=json_bytes, caption=f"画廊链接为：https://exhentai.org/g/{data[1]}/{data[2]}", reply_to_message_id=query.message.message_id)
 
 async def status_task(context: CallbackContext) -> None:
     """定时任务"""
@@ -904,6 +969,15 @@ async def inline_query(update: Update, context: CallbackContext):
                         )
                     ]
                     # 返回结果给用户
+                    await update.inline_query.answer(results)
+                elif len(cs) == 1:
+                    results = [
+                    InlineQueryResultArticle(
+                        id=str(uuid.uuid4()),  # 需要唯一 ID
+                        title=cs,
+                        input_message_content=InputTextMessageContent(cs)
+                    )
+                    ]
                     await update.inline_query.answer(results)
 
 join_handler = ConversationHandler(

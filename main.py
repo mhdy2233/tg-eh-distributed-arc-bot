@@ -1,4 +1,4 @@
-import yaml, requests, random, re, io, json
+import yaml, requests, random, re, io, time
 from bs4 import BeautifulSoup
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
@@ -77,6 +77,8 @@ async def eh_page(gid, token):
         return image, caption, img_url
     elif eh.status_code == 403:
         return 403
+    elif eh.status_code == 404:
+        return 404
     else:
         return 500
 
@@ -143,7 +145,7 @@ def arc_download(addr, key, gid, token, clarity, use_gp):
             return True, link
         
 async def eh_meta(gid, token):
-    api = "https://exhentai.org/api.php"
+    api = "https://e-hentai.org/api.php"
     data = {
     "method": "gdata",
     "gidlist": [
@@ -151,8 +153,26 @@ async def eh_meta(gid, token):
     ],
     "namespace": 1
     }
-    meta = requests.post(url=api, json=data, cookies=random.choice(config['eh_cookies']))
-    # 将 JSON 转换为字符串，并写入 BytesIO 内存流
-    json_bytes = io.BytesIO(json.dumps(meta.json(), indent=4, ensure_ascii=False).encode("utf-8"))
-    json_bytes.name = f"{gid}.json"  # 设置文件名，Telegram 需要这个
-    return json_bytes
+    meta = requests.post(url=api, json=data).json()
+    return meta
+
+async def eh_page_meta(gid, token):
+    page_meta = await eh_meta(gid, token)
+    if page_meta['gmetadata'][0].get('error'):
+        return 500
+    else:
+        data = page_meta['gmetadata'][0]
+        title1 = data['title']
+        title2 = data['title_jpn']
+        page_type = data['category'].lower()
+        uploader = f"<a href='https://exhentai.org/uploader/{data['uploader']}'>{data['uploader']}</a>"
+        posted = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(data['posted'])))
+        size = str(round(data['filesize'] / 1048576, 1)) + "MB"
+        pages = data['filecount']
+        average = data['rating']
+        labels = data['tags']
+        img_url = data['thumb']
+        if data['expunged'] == True:
+            labels.append("other:已删除")
+        caption = [title1, title2, page_type, uploader, posted, size, pages, average, labels]
+        return img_url, caption
