@@ -679,11 +679,19 @@ async def white_add(update: Update, context: ContextTypes):
             white_list = json.load(f)
     else:
         white_list = []
-    w = white_list + args
+    y = []
+    n = []
+    for arg in args:
+        if arg in white_list:
+            y.append(arg)
+        else:
+            white_list.append(arg)
+            n.append(arg)
     with open("./white.json", 'w', encoding='utf-8') as f:
-        json.dump(w, f, ensure_ascii=False)
-    bb = "\n".join(w)
-    await update.message.reply_text(f"添加成功，新增用户：\n{bb}")
+        json.dump(white_list, f, ensure_ascii=False)
+    yy = "\n".join(y)
+    nn = "\n".join(n)
+    await update.message.reply_text(f"添加成功，新增用户：\n{nn}\n已添加的用户：{yy}")
 
 async def white_del(update: Update, context: ContextTypes):
     user_id = update.message.from_user.id
@@ -719,11 +727,19 @@ async def ban_add(update: Update, context: ContextTypes):
             black_list = json.load(f)
     else:
         black_list = []
-    w = black_list + args
+    y = []
+    n = []
+    for arg in args:
+        if arg in black_list:
+            y.append(arg)
+        else:
+            black_list.append(arg)
+            n.append(arg)
     with open("./black.json", 'w', encoding='utf-8') as f:
-        json.dump(w, f, ensure_ascii=False)
-    bb = "\n".join(w)
-    await update.message.reply_text(f"添加成功，封禁用户：\n{bb}")
+        json.dump(black_list, f, ensure_ascii=False)
+    yy = "\n".join(y)
+    nn = "\n".join(n)
+    await update.message.reply_text(f"添加成功，封禁用户：\n{nn}\n已封禁的用户：{yy}")
 
 async def ban_del(update: Update, context: ContextTypes):
     user_id = update.message.from_user.id
