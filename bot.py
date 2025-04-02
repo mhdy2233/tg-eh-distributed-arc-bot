@@ -1125,7 +1125,7 @@ def main():
     app.add_handler(InlineQueryHandler(inline_query))
 
     app.job_queue.run_once(on_startup, 0)
-    app.job_queue.run_once(mysql_, 3)
+    app.job_queue.run_once(mysql_, 5)
 
     app.post_init = register_commands
 
