@@ -1,5 +1,5 @@
 import requests, os, json, re, yaml, random, io
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto, InlineQueryResultsButton
 from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters, InlineQueryHandler
 from main import addr_status, eh_page, eh_arc, arc_download, eh_meta, eh_page_meta
 from datetime import datetime, timedelta
@@ -105,7 +105,8 @@ async def mysql_(application):
                     user_gp INT,
                     use_gps INT DEFAULT 0,
                     use_num INT DEFAULT 0,
-                    use_time DATETIME
+                    use_time DATETIME,
+                    last_sign_in DATE
                 )
             """)
             print("✅ 数据表 `user_data` 已创建或已存在！")
@@ -309,7 +310,24 @@ async def page(gid, token, context):
             else:
                 file_id = result_[4]
                 return file_id, caption, keyboard, title
-            
+
+async def check(user_id):
+    async with db_pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (user_id))
+            result = await cur.fetchone()  # 获取查询结果
+            if not result:
+                return "你还没有注册请使用 /start 注册"
+            else:
+                await cur.execute("SELECT * FROM user_data WHERE user_id = %s AND (last_sign_in IS NULL OR last_sign_in < CURDATE());", (user_id))
+                result = await cur.fetchone()  # 获取查询结果
+                if result:
+                    random_number = random.randint(15000, 40000)
+                    await cur.execute("UPDATE user_data SET user_gp = %s, last_sign_in = CURDATE() WHERE user_id = %s", (random_number + result[4], user_id))
+                    return random_number, random_number + result[4]
+                else:
+                    return "今日已签到"
+                
 async def start(update: Update, context: CallbackContext):
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
@@ -327,19 +345,24 @@ async def start(update: Update, context: CallbackContext):
     user_name = update.message.from_user.username
     args = context.args
     if args:
-        gid, token = args[0].split("_")[0], args[0].split("_")[1]
-        aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
-        cs = await page(gid=gid, token=token, context=context)
-        if len(cs) == 4:
-            await context.bot.edit_message_media(
-                media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML"),
-                reply_markup=cs[2],
-                chat_id=user_id,
-                message_id=aaa.message_id)
-            return
-        else:
-            await aaa.edit_text(cs)
-            return
+        arg_list = args[0].split("_")
+        if len(arg_list) == 2:
+            gid, token = arg_list[0], arg_list[1]
+            aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
+            cs = await page(gid=gid, token=token, context=context)
+            if len(cs) == 4:
+                await context.bot.edit_message_media(
+                    media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML"),
+                    reply_markup=cs[2],
+                    chat_id=user_id,
+                    message_id=aaa.message_id)
+                return
+            else:
+                await aaa.edit_text(cs)
+                return
+        elif len(arg_list) == 1:
+            if arg_list == "help":
+                await update.message.reply_markdown(text=f"此bot为分布式eh归档链接获取bot\n基于[此项目](https://github.com/mhdy2233/tg-eh-distributed-arc-bot)制作")
     else:
         async with db_pool.acquire() as conn:  # 获取连接
             async with conn.cursor() as cur:  # 创建游标
@@ -446,6 +469,8 @@ async def ehentai(update: Update, context: CallbackContext):
         print("❌ 数据库未连接！")
         pass
     chat_id = update.message.chat_id
+    user_id = update.message.from_user.id
+    context.user_data['user_id'] = user_id
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
             black_list = json.load(f)
@@ -488,18 +513,20 @@ async def ehentai(update: Update, context: CallbackContext):
 
 async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
-    keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
     clicked_text = query.data
+    if not query.from_user.id == context.user_data['user_id']:
+        await query.answer(text="是你的东西吗？你就点！", show_alert=True)
     await query.answer()
     chat = await context.bot.get_chat(my_chat)
-    if query.message.chat.id == chat.id:
-        return
     data = query.data.split("|")
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
         pass
     if data[0] == 'arc':
+        if query.message.chat.id == chat.id:
+            return
+        keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
         # 移除该按钮
         new_keyboard = []
         for row in keyboard:
@@ -531,6 +558,9 @@ async def button_callback(update: Update, context: CallbackContext):
                     await context.bot.send_message(chat_id=query.message.chat.id, text="请先使用 /start 录入用户数据")
                     
     elif data[0] == 'original' or data[0] == 'resample':
+        if query.message.chat.id == chat.id:
+            return
+        keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
         gid, token, use_gp = data[1], data[2], data[3]
         await query.message.edit_reply_markup(reply_markup=None)  # 移除键盘
         if not db_pool:
@@ -582,9 +612,12 @@ async def button_callback(update: Update, context: CallbackContext):
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE server_data SET enable = %s WHERE id = %s", ("on", data[1]))
                 await context.bot.send_message(chat_id=query.message.chat.id, text="启用成功")
-    elif data[0] == "cancel":
-        await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+    elif data[0] == "del":
+        await query.delete_message()
     elif data[0] == "json":
+        if query.message.chat.id == chat.id:
+            return
+        keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
         # 移除该按钮
         new_keyboard = []
         for row in keyboard:
@@ -601,6 +634,15 @@ async def button_callback(update: Update, context: CallbackContext):
         json_bytes = io.BytesIO(json.dumps(meta, indent=4, ensure_ascii=False).encode("utf-8"))
         json_bytes.name = f"{data[1]}.json"  # 设置文件名，Telegram 需要这个
         await context.bot.send_document(chat_id=query.message.chat_id, document=json_bytes, caption=f"画廊链接为：https://exhentai.org/g/{data[1]}/{data[2]}", reply_to_message_id=query.message.message_id)
+    elif data[0] == 'check_in':
+        num = await check(user_id=query.from_user.id)
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("删除消息", callback_data="del")]
+            ])
+        if len(num) == 1:
+            await query.edit_message_text(text=num, reply_markup=keyboard)
+        elif len(num) == 2:
+            await query.edit_message_text(text=f"签到成功！\n获得 {num[0]} GP\n现在共有 {num[1]} GP", reply_markup=keyboard)
 
 async def status_task(context: CallbackContext) -> None:
     """定时任务"""
@@ -743,7 +785,7 @@ async def del_client(update: Update, context: ContextTypes):
             elif result[8] == "off":
                 await update.message.reply_text("您的后端节点已停用")
             else:
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击停用", callback_data=f"yes_del|{result[0]}")], [InlineKeyboardButton("取消", callback_data="cancel")]])
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击停用", callback_data=f"yes_del|{result[0]}")], [InlineKeyboardButton("取消", callback_data="del")]])
                 await update.message.reply_text(text="您确定要停用后端节点吗？", reply_markup=keyboard)
 
 async def start_client(update: Update, context: ContextTypes):
@@ -887,16 +929,12 @@ async def check_in(update: Update, context: ContextTypes):
     if not db_pool:
         print("❌ 数据库未连接！")
         return
-    async with db_pool.acquire() as conn:
-        async with conn.cursor() as cur:
-            await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (update.message.from_user.id))
-            result = await cur.fetchone()  # 获取查询结果
-            if not result:
-                await update.message.reply_text("请先使用 /start 注册")
-            else:
-                random_number = random.randint(15000, 40000)
-                await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (random_number + result[4], update.message.from_user.id))
-                await update.message.reply_text(f"签到成功！\n获得**{random_number}**GP\n当前有**{random_number + result[4]}**GP", parse_mode='Markdown')
+    user_id = update.message.from_user.id
+    num = check(user_id)
+    if len(num) == 1:
+        await update.message.reply_text(num)
+    elif len(num) == 2:
+        await update.message.reply_text(f"签到成功！\n获得**{num[0]}**GP\n当前有**{num[1]}**GP", parse_mode='Markdown')
 
 async def add_gp(update: Update, context: ContextTypes):
     args = context.args
@@ -930,13 +968,36 @@ async def inline_query(update: Update, context: CallbackContext):
 
     # 获取发起查询的用户 ID
     user_id = inline_query.from_user.id
+    username = inline_query.from_user.username
+    context.user_data['user_id'] = user_id
     if not user_input: 
+        async with db_pool.acquire() as conn:  # 获取连接
+            async with conn.cursor() as cur:  # 创建游标
+                await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (user_id))
+                result = await cur.fetchone()  # 获取查询结果（单条数据）
+                shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
+                if not result:
+                    await cur.execute("INSERT INTO user_data (created_time, user_id, username, user_gp, use_gps, use_num) VALUES (%s, %s, %s, %s, %s, %s)", (shanghai_time, user_id, username, 20000, 0, 0))
+                    my_info_text = f"你是第{cur.lastrowid}位用户\n使用次数为：0\n使用gp为：0\n剩余gp为：0"
+                else:
+                    my_info_text = f"你是第{result[0]}位用户\n使用次数为：{result[6]}\n使用gp为：{result[5]}\n剩余gp为：{result[4]}\n最后一次使用时间为：{result[7]}"
+
+                keyboard = InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("签到", callback_data='check_in'), InlineKeyboardButton("删除消息", callback_data='del')]
+                    ]
+                )
         results = [
-        InlineQueryResultArticle(
-            id=str(uuid.uuid4()),  # 需要唯一 ID
-            title=f"请输入eh/ex链接已获取预览",
-            input_message_content=InputTextMessageContent(f"请输入eh/ex链接")
-        )
+            InlineQueryResultArticle(
+                id=str(uuid.uuid4()),  # 需要唯一 ID
+                title=f"请输入eh/ex链接已获取预览",
+                input_message_content=InputTextMessageContent(f"请输入eh/ex链接")),
+            InlineQueryResultArticle(
+                id=str(uuid.uuid4()),  # 需要唯一 ID
+                title="我的信息(签到)",
+                input_message_content=InputTextMessageContent(my_info_text),
+                description = "查看自己的信息以及签到",
+                reply_markup = keyboard)
         ]
         await update.inline_query.answer(results)
     else:
@@ -951,6 +1012,8 @@ async def inline_query(update: Update, context: CallbackContext):
             else:
                 gid, token = urls[1], urls[2]
                 cs = await page(gid=gid, token=token, context=context)
+                json_data = await eh_meta(gid, token)
+                formatted_json = f"<blockquote expandable>{json.dumps(json_data, indent=4)}</blockquote>"
                 if len(cs) == 4:
                     keyboard = InlineKeyboardMarkup([
                         [InlineKeyboardButton("点击跳转画廊", url=url)],
@@ -961,11 +1024,20 @@ async def inline_query(update: Update, context: CallbackContext):
                             id=str(uuid.uuid4()),  # 唯一 ID
                             photo_url=cs[0],  # 发送的图片 URL（必须是可访问的）
                             thumbnail_url=cs[0],  # 缩略图 URL（通常和 photo_url 相同，但可以使用不同的小图）
-                            title=gid,  # 仅用于显示在内联查询的选项列表中
+                            title=f"画廊解析",  # 仅用于显示在内联查询的选项列表中
                             description=cs[3],  # 仅用于内联查询选项列表的简要描述
                             caption=cs[1],  # 发送图片时的文本说明
                             parse_mode="HTML",
                             reply_markup=keyboard  # 发送图片时附带的按钮
+                        ),
+                        InlineQueryResultArticle(
+                        id=str(uuid.uuid4()),  # 唯一 ID
+                        title=f"json元数据",  # 内联查询结果标题
+                        input_message_content=InputTextMessageContent(
+                            formatted_json,  # 发送的消息内容（格式化的 JSON）
+                            parse_mode="HTML"  # 使用 HTML 格式
+                        ),
+                        description=json_data['gmetadata'][0]['title']  # 描述，可以在内联查询中显示
                         )
                     ]
                     # 返回结果给用户
