@@ -328,6 +328,29 @@ async def check(user_id):
                 else:
                     return "今日已签到"
                 
+async def my_info_text_(user_id, username):
+    print(user_id, username)
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        pass
+    async with db_pool.acquire() as conn:  # 获取连接
+        async with conn.cursor() as cur:  # 创建游标
+            await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (user_id))
+            result = await cur.fetchone()  # 获取查询结果（单条数据）
+            print(f"第一次查询{result}")
+            shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
+            if not result:
+                await cur.execute("INSERT INTO user_data (created_time, user_id, username, user_gp, use_gps, use_num) VALUES (%s, %s, %s, %s, %s, %s)", (shanghai_time, user_id, username, 20000, 0, 0))
+                await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (user_id))
+                result = await cur.fetchone()  # 获取查询结果（单条数据）
+                print(f"第二次查询{result}")
+                my_info_text = f"你是第{result[0]}位用户\n使用次数为：{result[6]}\n使用gp为：{result[5]}\n剩余gp为：{result[4]}"
+                return my_info_text
+            else:
+                my_info_text = f"你是第{result[0]}位用户\n使用次数为：{result[6]}\n使用gp为：{result[5]}\n剩余gp为：{result[4]}\n最后一次使用时间为：{result[7]}"
+                return my_info_text
+            
 async def start(update: Update, context: CallbackContext):
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
@@ -360,9 +383,8 @@ async def start(update: Update, context: CallbackContext):
             else:
                 await aaa.edit_text(cs)
                 return
-        elif len(arg_list) == 1:
-            if arg_list == "help":
-                await update.message.reply_markdown(text=f"此bot为分布式eh归档链接获取bot\n基于[此项目](https://github.com/mhdy2233/tg-eh-distributed-arc-bot)制作")
+        elif args[0] == "help":
+            await update.message.reply_markdown(text=f"此bot为分布式eh归档链接获取bot\n基于[此项目](https://github.com/mhdy2233/tg-eh-distributed-arc-bot)制作")
     else:
         async with db_pool.acquire() as conn:  # 获取连接
             async with conn.cursor() as cur:  # 创建游标
@@ -497,7 +519,7 @@ async def ehentai(update: Update, context: CallbackContext):
                 has_spoiler=False
             elif update.message.chat.type == "supergroup" or update.message.chat.type == "group":
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}")], 
+                    [InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")], 
                     [InlineKeyboardButton("点击跳转画廊", url=url),
                     InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
                     ])
@@ -514,9 +536,6 @@ async def ehentai(update: Update, context: CallbackContext):
 async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
     clicked_text = query.data
-    if not query.from_user.id == context.user_data['user_id']:
-        await query.answer(text="是你的东西吗？你就点！", show_alert=True)
-    await query.answer()
     chat = await context.bot.get_chat(my_chat)
     data = query.data.split("|")
     global db_pool
@@ -524,6 +543,7 @@ async def button_callback(update: Update, context: CallbackContext):
         print("❌ 数据库未连接！")
         pass
     if data[0] == 'arc':
+        await query.answer()
         if query.message.chat.id == chat.id:
             return
         keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
@@ -558,6 +578,7 @@ async def button_callback(update: Update, context: CallbackContext):
                     await context.bot.send_message(chat_id=query.message.chat.id, text="请先使用 /start 录入用户数据")
                     
     elif data[0] == 'original' or data[0] == 'resample':
+        await query.answer()
         if query.message.chat.id == chat.id:
             return
         keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
@@ -597,6 +618,7 @@ async def button_callback(update: Update, context: CallbackContext):
                                 await cur.execute("UPDATE server_data SET status = %s WHERE user_id = %s", ("inactive", server_user_id))
                             await context.bot.send_message(chat_id=server_user_id, text=link[1])
     elif data[0] == "yes_del":
+        await query.answer()
         if not db_pool:
             print("❌ 数据库未连接！")
             return
@@ -605,6 +627,7 @@ async def button_callback(update: Update, context: CallbackContext):
                 await cur.execute("UPDATE server_data SET enable = %s WHERE id = %s", ("off", data[1]))
                 await context.bot.send_message(chat_id=query.message.chat.id, text="停用成功")
     elif data[0] == "yes_start":
+        await query.answer()
         if not db_pool:
             print("❌ 数据库未连接！")
             return
@@ -613,8 +636,12 @@ async def button_callback(update: Update, context: CallbackContext):
                 await cur.execute("UPDATE server_data SET enable = %s WHERE id = %s", ("on", data[1]))
                 await context.bot.send_message(chat_id=query.message.chat.id, text="启用成功")
     elif data[0] == "del":
+        await query.answer()
         await query.delete_message()
     elif data[0] == "json":
+        if not str(query.from_user.id) == data[3]:
+            await query.answer(text="是你的东西吗？你就点！", show_alert=True)
+        await query.answer()
         if query.message.chat.id == chat.id:
             return
         keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
@@ -634,15 +661,42 @@ async def button_callback(update: Update, context: CallbackContext):
         json_bytes = io.BytesIO(json.dumps(meta, indent=4, ensure_ascii=False).encode("utf-8"))
         json_bytes.name = f"{data[1]}.json"  # 设置文件名，Telegram 需要这个
         await context.bot.send_document(chat_id=query.message.chat_id, document=json_bytes, caption=f"画廊链接为：https://exhentai.org/g/{data[1]}/{data[2]}", reply_to_message_id=query.message.message_id)
-    elif data[0] == 'check_in':
-        num = await check(user_id=query.from_user.id)
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("删除消息", callback_data="del")]
-            ])
-        if len(num) == 1:
-            await query.edit_message_text(text=num, reply_markup=keyboard)
-        elif len(num) == 2:
-            await query.edit_message_text(text=f"签到成功！\n获得 {num[0]} GP\n现在共有 {num[1]} GP", reply_markup=keyboard)
+    elif data[0] == "check_in":
+        if not str(query.from_user.id) == data[1]:
+            await query.answer(text="是你的东西吗？你就点！", show_alert=True)
+        else:
+            await query.answer()
+            num = await check(user_id=data[1])
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("返回", callback_data=f"back|{str(query.from_user.id)}|{data[2]}")]
+                ])
+            if len(num) == 2:
+                await query.edit_message_text(text=f"签到成功！\n获得 {num[0]} GP\n现在共有 {num[1]} GP", reply_markup=keyboard)
+            else:
+                await query.edit_message_text(text=num, reply_markup=keyboard)
+    elif data[0] == "my_info":
+        if not str(query.from_user.id) == data[1]:
+            await query.answer(text="是你的东西吗？你就点！", show_alert=True)
+        else:
+            await query.answer()
+            my_info_text = await my_info_text_(data[1], data[2])
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("签到", callback_data=f'check_in|{data[1]}|{query.from_user.username}'), InlineKeyboardButton("返回", callback_data=f"back|{str(query.from_user.id)}|{data[2]}")]
+                ]
+            )
+            await query.edit_message_text(text=my_info_text, reply_markup=keyboard)
+    elif data[0] == "back":
+        if not str(query.from_user.id) == data[1]:
+            await query.answer(text="是你的东西吗？你就点！", show_alert=True)
+        else:
+            await query.answer()
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("签到", callback_data=f'check_in|{data[1]}|{query.from_user.username}'), InlineKeyboardButton("查看我的信息", callback_data=f'my_info|{data[1]}|{data[2]}')]
+                ]
+            )
+            await query.edit_message_text(text="点击按钮进行操作", reply_markup=keyboard)
 
 async def status_task(context: CallbackContext) -> None:
     """定时任务"""
@@ -946,11 +1000,11 @@ async def check_in(update: Update, context: ContextTypes):
         print("❌ 数据库未连接！")
         return
     user_id = update.message.from_user.id
-    num = check(user_id)
-    if len(num) == 1:
-        await update.message.reply_text(num)
-    elif len(num) == 2:
+    num = await check(user_id)
+    if len(num) == 2:
         await update.message.reply_text(f"签到成功！\n获得**{num[0]}**GP\n当前有**{num[1]}**GP", parse_mode='Markdown')
+    else:
+        await update.message.reply_text(num)
 
 async def add_gp(update: Update, context: ContextTypes):
     args = context.args
@@ -971,38 +1025,24 @@ async def add_gp(update: Update, context: ContextTypes):
                 await update.message.reply_text(f"添加成功现在一共有：{args[1] + result[4]}GP")
 
 async def inline_query(update: Update, context: CallbackContext):
-    global db_pool
-    if not db_pool:
-        print("❌ 数据库未连接！")
-        pass
     """处理内联查询，返回 web 相关的选项"""
     # 获取内联查询对象
-    inline_query = update.inline_query
     
     # 获取用户输入的查询文本
-    user_input = inline_query.query.strip()
+    user_input = update.inline_query.query.strip()
+
+    button = InlineQueryResultsButton(text="到bot查看更多信息", start_parameter="help")
 
     # 获取发起查询的用户 ID
-    user_id = inline_query.from_user.id
-    username = inline_query.from_user.username
-    context.user_data['user_id'] = user_id
+    user_id = update.inline_query.from_user.id
+    username = update.inline_query.from_user.username
     if not user_input: 
-        async with db_pool.acquire() as conn:  # 获取连接
-            async with conn.cursor() as cur:  # 创建游标
-                await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (user_id))
-                result = await cur.fetchone()  # 获取查询结果（单条数据）
-                shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
-                if not result:
-                    await cur.execute("INSERT INTO user_data (created_time, user_id, username, user_gp, use_gps, use_num) VALUES (%s, %s, %s, %s, %s, %s)", (shanghai_time, user_id, username, 20000, 0, 0))
-                    my_info_text = f"你是第{cur.lastrowid}位用户\n使用次数为：0\n使用gp为：0\n剩余gp为：0"
-                else:
-                    my_info_text = f"你是第{result[0]}位用户\n使用次数为：{result[6]}\n使用gp为：{result[5]}\n剩余gp为：{result[4]}\n最后一次使用时间为：{result[7]}"
-
-                keyboard = InlineKeyboardMarkup(
-                    [
-                        [InlineKeyboardButton("签到", callback_data='check_in'), InlineKeyboardButton("删除消息", callback_data='del')]
-                    ]
-                )
+        
+        keyboard = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("签到", callback_data=f'check_in|{user_id}|{username}'), InlineKeyboardButton("查看我的信息", callback_data=f'my_info|{user_id}|{username}')]
+            ]
+        )
         results = [
             InlineQueryResultArticle(
                 id=str(uuid.uuid4()),  # 需要唯一 ID
@@ -1011,11 +1051,11 @@ async def inline_query(update: Update, context: CallbackContext):
             InlineQueryResultArticle(
                 id=str(uuid.uuid4()),  # 需要唯一 ID
                 title="我的信息(签到)",
-                input_message_content=InputTextMessageContent(my_info_text),
+                input_message_content=InputTextMessageContent("点击按钮进行操作"),
                 description = "查看自己的信息以及签到",
                 reply_markup = keyboard)
         ]
-        await update.inline_query.answer(results)
+        await update.inline_query.answer(results, cache_time=0, button=button)
     else:
         pattern = r"(e-hentai|exhentai)"
         if bool(re.search(pattern, user_input, re.IGNORECASE)):
@@ -1057,7 +1097,7 @@ async def inline_query(update: Update, context: CallbackContext):
                         )
                     ]
                     # 返回结果给用户
-                    await update.inline_query.answer(results)
+                    await update.inline_query.answer(results, cache_time=99999, button=button)
                 elif len(cs) == 1:
                     results = [
                     InlineQueryResultArticle(
@@ -1066,7 +1106,7 @@ async def inline_query(update: Update, context: CallbackContext):
                         input_message_content=InputTextMessageContent(cs)
                     )
                     ]
-                    await update.inline_query.answer(results)
+                    await update.inline_query.answer(results, cache_time=0)
 
 join_handler = ConversationHandler(
     entry_points=[CommandHandler('join', join_addr)],  # 用户输入 /start 指令时进入对话
