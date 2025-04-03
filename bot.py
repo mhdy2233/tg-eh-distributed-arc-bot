@@ -512,7 +512,7 @@ async def ehentai(update: Update, context: CallbackContext):
         if not len(urls) == 3:
             # await aaa.edit_text("链接错误")
             # time.sleep(3)
-            # await aaa.delete()
+            await aaa.delete()
             return
         cs = await page(gid=gid, token=token, context=context)
         if len(cs) == 4:
