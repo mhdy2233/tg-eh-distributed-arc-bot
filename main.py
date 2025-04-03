@@ -1,5 +1,6 @@
 import yaml, requests, random, re, io, time
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse, urlunparse
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
@@ -56,7 +57,7 @@ async def eh_page(gid, token):
         match = re.search(r'url\((https?://[^\s)]+)\)', soup.find("div", style=re.compile(r'url\((.*?)\)'))['style'])
         if match:
             img_url = match.group(1)
-        image = obtain_cover(img_url)  # 获取画廊封面数据
+        image = obtain_cover(urlunparse(urlparse(img_url)._replace(netloc="ehgt.org")))  # 获取画廊封面数据
         title1 = soup.find('h1', id='gn').text   # 主标题
         title2 = soup.find('h1', id='gj').text   # 副标题
         page_type = soup.find('div', id='gdc').text.lower()  # 画廊类型

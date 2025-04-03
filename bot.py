@@ -1,4 +1,4 @@
-import requests, os, json, re, yaml, random, io
+import requests, os, json, re, yaml, random, io, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto, InlineQueryResultsButton
 from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters, InlineQueryHandler
 from main import addr_status, eh_page, eh_arc, arc_download, eh_meta, eh_page_meta
@@ -510,7 +510,9 @@ async def ehentai(update: Update, context: CallbackContext):
         gid, token = urls[1], urls[2]
         aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
         if not len(urls) == 3:
-            await aaa.edit_text("链接错误")
+            # await aaa.edit_text("链接错误")
+            # time.sleep(3)
+            # await aaa.delete()
             return
         cs = await page(gid=gid, token=token, context=context)
         if len(cs) == 4:
@@ -532,6 +534,9 @@ async def ehentai(update: Update, context: CallbackContext):
                 )
         elif len(cs) == 1:
             await aaa.edit_text(cs)
+            time.sleep(3)
+            await aaa.delete()
+            
 
 async def button_callback(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -950,7 +955,7 @@ async def last_page(update: Update, context: ContextTypes):
                     elif x[5]:
                         captions.append(f"{b}. <a href='https://exhentai.org/g/{z[0]}/{z[1]}'>{x[5]}</a>\n\n<a href='https://t.me/{bot_username}?start={z[0]}_{z[1]}'>在bot中打开</a>")
                 for x, caption in zip(result, captions):
-                    await cur.execute("SELECT * FROM message WHERE gid = %s", (z[0]))
+                    await cur.execute("SELECT * FROM message WHERE gid = %s", (str(x[6]).split("|")[0]))
                     result_ = await cur.fetchone()  # 获取查询结果（单条数据）
                     if result_:
                         media_group.append(InputMediaPhoto(media=result_[4], caption=caption, parse_mode='HTML'))
