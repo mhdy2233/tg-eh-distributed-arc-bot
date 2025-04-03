@@ -508,12 +508,9 @@ async def ehentai(update: Update, context: CallbackContext):
             url = "https://" + url
         urls = urlparse(update.message.text).path.strip("/").split("/")
         gid, token = urls[1], urls[2]
-        aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
         if not len(urls) == 3:
-            # await aaa.edit_text("链接错误")
-            # time.sleep(3)
-            await aaa.delete()
             return
+        aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
         cs = await page(gid=gid, token=token, context=context)
         if len(cs) == 4:
             if update.message.chat.type == "private":
