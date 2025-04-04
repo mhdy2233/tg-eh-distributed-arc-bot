@@ -58,7 +58,8 @@ tag_tra_dict = {
     "male": "男性", # 男性
     "female": "女性",  # 女性
     "mixed": "混合",    # 混合
-    "other": "其他" #其他
+    "other": "其他", #其他
+    "temp": "临时"
 }
 
 # 定义全局连接池变量
@@ -139,7 +140,7 @@ async def mysql_(application):
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     time DATETIME NOT NULL,
                     client_id INT,
-                    user_id INT NOT NULL,
+                    user_id BIGINT NOT NULL,
                     title1 VARCHAR(300),
                     title2 VARCHAR(300),
                     url VARCHAR(255),
@@ -236,7 +237,7 @@ async def get_translations(b, english_words):
                 return dict(tags_dict)
 
 
-async def page(gid, token, context):
+async def page(gid, token, context, user_id):
     global db_pool
     async with db_pool.acquire() as conn:  # 获取连接
         async with conn.cursor() as cur:  # 创建游标
@@ -266,14 +267,14 @@ async def page(gid, token, context):
                 for key, value in tagg_dict.items():
                     tagg = tagg + key + "： #" + ' #'.join(value) + "\n"
                 caption = f"主标题：{page_meta[1][0]}\n副标题：{page_meta[1][1]}\n画廊类型：{page_type}\n上传者：{page_meta[1][3]}\n上传时间：{page_meta[1][4]}\n画廊大小：{page_meta[1][5]}\n页数：{page_meta[1][6]}\n评分：{page_meta[1][7]}\n\n{tagg}"
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}")]])
-                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")]])
+                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
                 context.user_data['主标题'] = page_meta[1][0]
                 context.user_data['副标题'] = page_meta[1][1]
                 context.user_data['image'] = page_meta[0]
                 photo = page_meta[0]
                 title = page_meta[1][0]
-            elif len(result) == 3:
+            elif len(result) == 4:
                 await cur.execute("SELECT * FROM tag_data WHERE tag = %s AND tag_type = %s", (result[1][2], "gallery_type"))
                 page_type = await cur.fetchone()  # 获取查询结果（单条数据）
                 if not page_type:
@@ -291,15 +292,16 @@ async def page(gid, token, context):
                 for x in tags:
                     tag = ' '.join([f"#{word}" for word in x[1:]])
                     tagg = tagg + x[0] + "：" + tag + "\n"
-                caption = f"主标题：{result[1][0]}\n副标题：{result[1][1]}\n画廊类型：{page_type}\n上传者：{result[1][3]}\n上传时间：{result[1][4]}\n语言：{language}\n画廊大小：{result[1][6]}\n页数：{result[1][7]}\n收藏数：{result[1][8]}\n评分：{result[1][9]}\n\n{tagg}"
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3&from=1000")]])
-                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                caption = f"主标题：{result[1][0]}\n副标题：{result[1][1]}\n画廊类型：{page_type}\n上传者：{result[1][3]}\n上传时间：{result[1][4]}\n语言：{language}\n画廊大小：{result[1][6]}\n页数：{result[1][7]}\n收藏数：{result[1][8]}\n评分：{result[1][9]}\n\n{tagg}\n<blockquote expandable>{result[3]}</blockquote>"
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3&from=1000")]])
+                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
                 context.user_data['主标题'] = result[1][0]
                 context.user_data['副标题'] = result[1][1]
                 context.user_data['image'] = result[2]
                 photo = result[0]
                 title = result[1][0]
             if not result_:
+                
                 tg = await context.bot.send_photo(
                     chat_id=my_chat,  # 目标聊天 ID
                     photo=photo,  # 图片文件或图片 URL
@@ -374,7 +376,7 @@ async def start(update: Update, context: CallbackContext):
         if len(arg_list) == 2:
             gid, token = arg_list[0], arg_list[1]
             aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
-            cs = await page(gid=gid, token=token, context=context)
+            cs = await page(gid=gid, token=token, context=context, user_id=user_id)
             if len(cs) == 4:
                 await context.bot.edit_message_media(
                     media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML"),
@@ -513,7 +515,7 @@ async def ehentai(update: Update, context: CallbackContext):
         if not len(urls) == 3:
             return
         aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
-        cs = await page(gid=gid, token=token, context=context)
+        cs = await page(gid=gid, token=token, context=context, user_id=user_id)
         if len(cs) == 4:
             if update.message.chat.type == "private":
                 keyboard = cs[2]
@@ -613,7 +615,7 @@ async def button_callback(update: Update, context: CallbackContext):
                                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
                                 await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard, disable_web_page_preview=True, reply_to_message_id=query.message.message_id)
                                 await cur.execute("UPDATE server_data SET use_gps = %s WHERE user_id = %s", (result[9] + int(use_gp), server_user_id))
-                                await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], query.from_user.id, context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp) ))
+                                await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], int(query.from_user.id), context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp) ))
                                 break
                             else:
                                 if "GP不足" in link[1]:
@@ -1028,8 +1030,8 @@ async def add_gp(update: Update, context: ContextTypes):
             if not result:
                 await update.message.reply_text("该用户未注册")
             else:
-                await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (args[1] + result[4], args[0]))
-                await update.message.reply_text(f"添加成功现在一共有：{args[1] + result[4]}GP")
+                await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (int(args[1]) + result[4], args[0]))
+                await update.message.reply_text(f"添加成功现在一共有：{int(args[1]) + result[4]}GP")
 
 async def inline_query(update: Update, context: CallbackContext):
     """处理内联查询，返回 web 相关的选项"""
@@ -1074,7 +1076,7 @@ async def inline_query(update: Update, context: CallbackContext):
                 pass
             else:
                 gid, token = urls[1], urls[2]
-                cs = await page(gid=gid, token=token, context=context)
+                cs = await page(gid=gid, token=token, context=context, user_id=user_id)
                 json_data = await eh_meta(gid, token)
                 formatted_json = f"<blockquote expandable>{json.dumps(json_data, indent=4)}</blockquote>"
                 if len(cs) == 4:

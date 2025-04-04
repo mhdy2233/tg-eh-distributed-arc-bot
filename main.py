@@ -1,10 +1,10 @@
 import yaml, requests, random, re, io, time
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urlunparse
+from datetime import datetime
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
-
 def obtain_cover(img_url):
     """获取画廊封面
 
@@ -14,7 +14,7 @@ def obtain_cover(img_url):
     Returns:
         _type_: _description_
     """
-    response = requests.get(img_url, cookies=random.choice(config['eh_cookies']))
+    response = requests.get(img_url, cookies=random.choice(config['eh_cookies']), proxies=random.choice(config['proxy']))
 
     if response.status_code == 200:
         # 将图片数据保存到内存中的 BytesIO 对象
@@ -47,7 +47,7 @@ async def eh_page(gid, token):
     eh_cookie = random.choice(config['eh_cookies'])
     url = "https://exhentai.org/g/" + str(gid) + "/" + str(token)
     print(url)
-    eh = requests.get(url, cookies=eh_cookie)
+    eh = requests.get(url, cookies=eh_cookie, proxies=random.choice(config['proxy']))
     if eh.status_code == 200:
         if eh.text == "Key missing, or incorrect key provided.":
             return 400
@@ -75,7 +75,30 @@ async def eh_page(gid, token):
             b = tag_type + tags
             labels.append(b)
         caption = [title1, title2, page_type, uploader, posted, language, size, pages, favorited, average, labels]
-        return image, caption, img_url
+        comment = soup.find('div', id='cdiv').find_all('div', class_='c1')
+        com = ""
+        for x in comment:
+            tt = x.find('div', class_='c3').decode_contents()
+            # 提取时间字符串
+            time_str = tt.split("Posted on ")[1].split(" by:")  # '01 April 2022, 20:15'
+            # 解析时间
+            dt = datetime.strptime(time_str[0], "%d %B %Y, %H:%M")
+            # 转换为标准格式
+            formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                score = x.find('div', class_='c5').text
+            except AttributeError:
+                score = None
+            try:
+                message = x.find('div', class_='c6').text
+            except:
+                message = None
+            mes = f"{formatted_time} by：{time_str[1]}  {score}\n   {message}\n"
+            if len(com) + len(mes) > 1000:
+                break
+            else:
+                com += mes
+        return image, caption, img_url, com
     elif eh.status_code == 403:
         return 403
     elif eh.status_code == 404:
@@ -106,7 +129,7 @@ def convert_to_mib(value):
 
 def eh_arc(gid, token):
     url = f"https://exhentai.org/archiver.php?gid={gid}&token={token}"
-    arc = requests.get(url=url, cookies=random.choice(config['eh_cookies']))
+    arc = requests.get(url=url, cookies=random.choice(config['eh_cookies']), proxies=random.choice(config['proxy']))
 
     soup = BeautifulSoup(arc.text, 'html.parser')
     if soup == "This gallery is currently unavailable.":
