@@ -504,12 +504,9 @@ async def ehentai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not db_pool:
         print("❌ 数据库未连接！")
         pass
-    try:
-        chat_id = update.message.chat_id
-    except Exception as e:
-        message_dict = update.message.to_dict()
-        print(f"获取对话id出错\n{message_dict}")
+    if not update.message:
         return
+    chat_id = update.message.chat_id
     user_id = update.message.from_user.id
     context.user_data['user_id'] = user_id
     if os.path.exists("./black.json"):

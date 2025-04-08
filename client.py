@@ -35,14 +35,17 @@ class ShanghaiFormatter(logging.Formatter):
 # 设置日志格式和 handler
 log_format = "[%(asctime)s] [%(levelname)s] %(message)s"
 date_format = "%Y-%m-%d %H:%M:%S"
-
+console = logging.StreamHandler()
 handler = logging.FileHandler("eh_arc_log.txt")
 handler.setFormatter(ShanghaiFormatter(log_format, datefmt=date_format))
 
-# 应用日志配置
+# 让 console 也用上海时间格式
+console.setFormatter(ShanghaiFormatter(log_format, datefmt=date_format))
+
+# 应用日志配置：输出到文件 + 控制台
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[handler]
+    handlers=[handler, console]
 )
 
 def detection(gid,token,clarity,use_gp):
@@ -114,7 +117,7 @@ CORS(app)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["100 per hour"]  # 默认全局限制
+    default_limits=["1000 per hour"]  # 默认全局限制
 )
 
 @app.route('/api/url', methods=['POST', 'GET'])
