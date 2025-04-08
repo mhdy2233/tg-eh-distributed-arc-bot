@@ -141,7 +141,7 @@ def eh_arc(gid, token):
         original_gp = round(original_size / 0.063)
         resample_gp = round(resample_size / 0.063)
     elif strong[2].text == "N/A" and strong[0].text == "Free!":
-        original_gp = round(int(strong[0].text.split(" ")[0].replace(",", "")))
+        original_gp = round(original_size / 0.063)
         resample_gp = "N/A"
     else:
         original_gp = round(int(strong[0].text.split(" ")[0].replace(",", "")))
