@@ -2,6 +2,8 @@ import requests, logging
 from bs4 import BeautifulSoup
 from flask import request, Flask, jsonify, redirect
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from datetime import datetime, timedelta, timezone
 
 key = "1234"
@@ -108,7 +110,15 @@ def refresh_url(gid, token):
 app = Flask(__name__)
 CORS(app)
 
+# 设置 IP 限制器
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["100 per hour"]  # 默认全局限制
+)
+
 @app.route('/api/url', methods=['POST', 'GET'])
+@limiter.limit("100 per minute")  # 单独给这个路由加限制
 def process_data():
     if request.method == 'POST':
         try:

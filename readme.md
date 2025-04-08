@@ -39,4 +39,4 @@ key为在bot中添加时所需
 `python3 client.py` 启动  
 **注意事项：**
 首先你的网络需要可以连接到e-hentai以及exhentai(可使用http代理)  
-client需要flask, flask_CORS, bs4, requests，可以使用pip3进行安装
+client需要flask, flask_CORS, bs4, requests，flask_limiter可以使用pip3进行安装
