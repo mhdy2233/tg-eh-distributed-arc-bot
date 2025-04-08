@@ -775,7 +775,7 @@ async def task(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bb = e
     else:
         bb = "执行完成"
-    update.message.reply_text(bb)
+    await update.message.reply_text(bb)
 
 async def white_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id

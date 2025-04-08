@@ -138,14 +138,17 @@ def eh_arc(gid, token):
     original_size = convert_to_mib(strong[1].text)   # 原图大小
     resample_size = convert_to_mib(strong[3].text)   # 重彩样大小
     if strong[2].text == "Free!":
-        original_gp = round(original_size / 0.063)
         resample_gp = round(resample_size / 0.063)
-    elif strong[2].text == "N/A" and strong[0].text == "Free!":
-        original_gp = round(original_size / 0.063)
+    elif strong[2].text == "N/A":
         resample_gp = "N/A"
     else:
-        original_gp = round(int(strong[0].text.split(" ")[0].replace(",", "")))
         resample_gp = round(int(strong[2].text.split(" ")[0].replace(",", "")))
+    if strong[0].text == "Free!":
+        original_gp = round(original_size / 0.063)
+    elif strong[0].text == "N/A":
+        original_gp = "N/A"
+    else:
+        original_gp = round(int(strong[0].text.split(" ")[0].replace(",", "")))
     size = [original_size, resample_size]
     gp = [round(original_gp), resample_gp]
     return size, gp
