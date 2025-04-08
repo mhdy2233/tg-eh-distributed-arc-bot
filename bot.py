@@ -1,7 +1,8 @@
 import requests, os, json, re, yaml, random, io, time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto, InlineQueryResultsButton
-from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, CallbackContext, filters, InlineQueryHandler
-from main import addr_status, eh_page, eh_arc, arc_download, eh_meta, eh_page_meta
+from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, filters, InlineQueryHandler
+from telegram.request import HTTPXRequest
+from main import addr_status, eh_page, eh_arc, arc_download, eh_meta, eh_page_meta, eh_dmca
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
@@ -15,6 +16,7 @@ bot_token = config['bot_token']
 proxies = config.get("proxy")
 bot_username = config['bot_username']
 my_chat = config['my_chat']
+has_spoiler_chat_list = [1529292095, 2386565629]
 # 定义命令列表
 COMMANDS = [
     BotCommand("start", "开始使用机器人"),
@@ -59,7 +61,8 @@ tag_tra_dict = {
     "female": "女性",  # 女性
     "mixed": "混合",    # 混合
     "other": "其他", #其他
-    "temp": "临时"
+    "temp": "临时",
+    "reclass": "重新分类"
 }
 
 # 定义全局连接池变量
@@ -266,14 +269,20 @@ async def page(gid, token, context, user_id):
                 tagg_dict = await get_translations("meta", page_meta[1][8])
                 for key, value in tagg_dict.items():
                     tagg = tagg + key + "： #" + ' #'.join(value) + "\n"
-                caption = f"主标题：{page_meta[1][0]}\n副标题：{page_meta[1][1]}\n画廊类型：{page_type}\n上传者：{page_meta[1][3]}\n上传时间：{page_meta[1][4]}\n画廊大小：{page_meta[1][5]}\n页数：{page_meta[1][6]}\n评分：{page_meta[1][7]}\n\n{tagg}"
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")]])
-                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                url = await eh_dmca(gid)
+                if url:
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("点击跳转本子", url=url)]])
+                    keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("点击跳转本子", url=url)], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                else:
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")]])
+                    keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                caption = f"<blockquote expandable>主标题：{page_meta[1][0]}\n副标题：{page_meta[1][1]}\n画廊类型：{page_type}\n上传者：{page_meta[1][3]}\n上传时间：{page_meta[1][4]}\n画廊大小：{page_meta[1][5]}\n页数：{page_meta[1][6]}\n评分：{page_meta[1][7]}\n\n{tagg}</blockquote>"
                 context.user_data['主标题'] = page_meta[1][0]
                 context.user_data['副标题'] = page_meta[1][1]
                 context.user_data['image'] = page_meta[0]
                 photo = page_meta[0]
                 title = page_meta[1][0]
+                dmca = url
             elif len(result) == 4:
                 await cur.execute("SELECT * FROM tag_data WHERE tag = %s AND tag_type = %s", (result[1][2], "gallery_type"))
                 page_type = await cur.fetchone()  # 获取查询结果（单条数据）
@@ -292,14 +301,15 @@ async def page(gid, token, context, user_id):
                 for x in tags:
                     tag = ' '.join([f"#{word}" for word in x[1:]])
                     tagg = tagg + x[0] + "：" + tag + "\n"
-                caption = f"主标题：{result[1][0]}\n副标题：{result[1][1]}\n画廊类型：{page_type}\n上传者：{result[1][3]}\n上传时间：{result[1][4]}\n语言：{language}\n画廊大小：{result[1][6]}\n页数：{result[1][7]}\n收藏数：{result[1][8]}\n评分：{result[1][9]}\n\n{tagg}\n<blockquote expandable>{result[3]}</blockquote>"
+                caption = f"<blockquote expandable>主标题：{result[1][0]}\n副标题：{result[1][1]}\n画廊类型：{page_type}\n上传者：{result[1][3]}\n上传时间：{result[1][4]}\n语言：{language}\n画廊大小：{result[1][6]}\n页数：{result[1][7]}\n收藏数：{result[1][8]}\n评分：{result[1][9]}\n\n{tagg}\n{result[3]}</blockquote>"
                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3&from=1000")]])
-                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
                 context.user_data['主标题'] = result[1][0]
                 context.user_data['副标题'] = result[1][1]
                 context.user_data['image'] = result[2]
                 photo = result[0]
                 title = result[1][0]
+                dmca = False
             if not result_:
                 
                 tg = await context.bot.send_photo(
@@ -311,10 +321,10 @@ async def page(gid, token, context, user_id):
                     )
                 file_id = tg.photo[-1].file_id
                 await cur.execute("INSERT INTO message (gid, title, message_id, file_id) VALUES (%s, %s, %s, %s)", (gid, title, tg.message_id, file_id))
-                return file_id, caption, keyboard, title
+                return file_id, caption, keyboard, title, dmca
             else:
                 file_id = result_[4]
-                return file_id, caption, keyboard, title
+                return file_id, caption, keyboard, title, dmca
 
 async def check(user_id):
     async with db_pool.acquire() as conn:
@@ -322,12 +332,12 @@ async def check(user_id):
             await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (user_id))
             result = await cur.fetchone()  # 获取查询结果
             if not result:
-                return "你还没有注册请使用 /start 注册"
+                return "你还没有注册请使用 /start@ehentai_archive_bot 注册"
             else:
                 await cur.execute("SELECT * FROM user_data WHERE user_id = %s AND (last_sign_in IS NULL OR last_sign_in < CURDATE());", (user_id))
                 result = await cur.fetchone()  # 获取查询结果
                 if result:
-                    random_number = random.randint(15000, 40000)
+                    random_number = random.randint(5000, 15000)
                     await cur.execute("UPDATE user_data SET user_gp = %s, last_sign_in = CURDATE() WHERE user_id = %s", (random_number + result[4], user_id))
                     return random_number, random_number + result[4]
                 else:
@@ -355,7 +365,7 @@ async def my_info_text_(user_id, username):
                 my_info_text = f"你是第{result[0]}位用户\n使用次数为：{result[6]}\n使用gp为：{result[5]}\n剩余gp为：{result[4]}\n最后一次使用时间为：{result[7]}"
                 return my_info_text
             
-async def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
             black_list = json.load(f)
@@ -377,7 +387,7 @@ async def start(update: Update, context: CallbackContext):
             gid, token = arg_list[0], arg_list[1]
             aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
             cs = await page(gid=gid, token=token, context=context, user_id=user_id)
-            if len(cs) == 4:
+            if len(cs) == 5:
                 await context.bot.edit_message_media(
                     media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML"),
                     reply_markup=cs[2],
@@ -404,7 +414,7 @@ async def start(update: Update, context: CallbackContext):
                         inserted_id = 0
                     await update.message.reply_text(f"用户信息录入完成\n用户id：{user_id}\n用户名：{user_name}\n用户初始GP：{20000}\n用户为第{inserted_id}位\n当前上海时间为：{shanghai_time}")
 
-async def join_addr(update: Update, context: CallbackContext):
+async def join_addr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
             black_list = json.load(f)
@@ -440,7 +450,7 @@ async def join_addr(update: Update, context: CallbackContext):
                 context.user_data['username'] = username
                 return "join_0"
 
-async def join_0(update: Update, context: CallbackContext):
+async def join_0(update: Update, context: ContextTypes.DEFAULT_TYPE):
     addr = update.message.text
     if not addr:
         await update.message.reply_text("请输入你的后端节点地址如：\nhttp://127.0.0.1:11451\nhttps://eh.mhdy.shop")
@@ -449,7 +459,7 @@ async def join_0(update: Update, context: CallbackContext):
     await update.message.reply_text("请输入绑定密钥(字符串)，不要有空格或换行如：\n1234，你好，nihao...")
     return "join_1"
 
-async def join_1(update: Update, context: CallbackContext):
+async def join_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
@@ -477,7 +487,7 @@ async def join_1(update: Update, context: CallbackContext):
             await update.message.reply_text(status)
             return ConversationHandler.END
 
-async def cancel(update: Update, context: CallbackContext):
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if os.path.exists("./black.json"):
         with open("./black.json", 'r', encoding='utf-8') as f:
             black_list = json.load(f)
@@ -489,12 +499,17 @@ async def cancel(update: Update, context: CallbackContext):
     await update.message.reply_text("已取消操作")
     return ConversationHandler.END
 
-async def ehentai(update: Update, context: CallbackContext):
+async def ehentai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
         pass
-    chat_id = update.message.chat_id
+    try:
+        chat_id = update.message.chat_id
+    except Exception as e:
+        message_dict = update.message.to_dict()
+        print(f"获取对话id出错\n{message_dict}")
+        return
     user_id = update.message.from_user.id
     context.user_data['user_id'] = user_id
     if os.path.exists("./black.json"):
@@ -516,16 +531,25 @@ async def ehentai(update: Update, context: CallbackContext):
             return
         aaa = await update.message.reply_text("正在检测处理画廊，请稍候...")
         cs = await page(gid=gid, token=token, context=context, user_id=user_id)
-        if len(cs) == 4:
+        if len(cs) == 5:
             if update.message.chat.type == "private":
                 keyboard = cs[2]
                 has_spoiler=False
             elif update.message.chat.type == "supergroup" or update.message.chat.type == "group":
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("点击跳转画廊", url=url),
-                    InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
-                    ])
-                has_spoiler=True
+                if cs[4]:
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("点击跳转画廊", url=cs[4]),
+                        InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
+                        ])
+                else:
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("点击跳转画廊", url=url),
+                        InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
+                        ])
+                if int(str(chat_id)[3:]) in has_spoiler_chat_list:
+                    has_spoiler=False
+                else:
+                    has_spoiler=True
             await context.bot.edit_message_media(
                 media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML", has_spoiler=has_spoiler),
                 reply_markup=keyboard,
@@ -538,7 +562,7 @@ async def ehentai(update: Update, context: CallbackContext):
             await aaa.delete()
             
 
-async def button_callback(update: Update, context: CallbackContext):
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     clicked_text = query.data
     chat = await context.bot.get_chat(my_chat)
@@ -600,7 +624,11 @@ async def button_callback(update: Update, context: CallbackContext):
                 if remnant_gp < 0:
                     await context.bot.send_message(chat_id=query.message.chat.id, text="剩余gp不足")
                 else:
+                    nnn = 0
                     while True:
+                        if nnn == 5:
+                            for x in config['gm_list']:
+                                await context.bot.send_message(chat_id=x, text=f"{gid}画廊超过5次获取归档失败！请检查日志")
                         await cur.execute("SELECT * FROM server_data WHERE status = 'active' AND gp_status = 'active' ORDER BY RAND() LIMIT 1")
                         result = await cur.fetchone()  # 获取查询结果
                         if not result:
@@ -623,8 +651,12 @@ async def button_callback(update: Update, context: CallbackContext):
                                 else:
                                     await cur.execute("UPDATE server_data SET status = %s WHERE user_id = %s", ("inactive", server_user_id))
                                 await context.bot.send_message(chat_id=server_user_id, text=link[1])
-                        except KeyError:
-                            pass
+                                nnn +=1
+                        except Exception as e:
+                            for x in config['gm_list']:
+                                await context.bot.send_message(chat_id=x, text=f"出现错误，错误信息：\n{e}")
+                            print(f"出现错误！！！：{e}")
+                            break
     elif data[0] == "yes_del":
         await query.answer()
         if not db_pool:
@@ -707,7 +739,7 @@ async def button_callback(update: Update, context: CallbackContext):
             )
             await query.edit_message_text(text="点击按钮进行操作", reply_markup=keyboard)
 
-async def status_task(context: CallbackContext) -> None:
+async def status_task(context: ContextTypes.DEFAULT_TYPE) -> None:
     """定时任务"""
     global db_pool
     if not db_pool:
@@ -724,12 +756,31 @@ async def status_task(context: CallbackContext) -> None:
                 if status == 200:
                     await cur.execute("UPDATE server_data SET status = %s, gp_status = %s WHERE id = %s", ("active", "active", row[0]))
                 elif status == "GP小于50000":
-                    await cur.execute("UPDATE server_data SET gp_status = %s WHERE id = %s", ("inactive", row[0]))
+                    if row[7] == "active":
+                        await context.bot.send_message(chat_id=row[2], text="GP不足，小于50000")
+                        await cur.execute("UPDATE server_data SET gp_status = %s WHERE id = %s", ("inactive", row[0]))
+                    elif row[7] == "inactive":
+                        pass
                 else:
-                    await cur.execute("UPDATE server_data SET status = %s WHERE id = %s", ("inactive", row[0]))
+                    if row[6] == "active":
+                        await context.bot.send_message(chat_id=row[2], text=f"状态异常，错误如下(不准确)：{status}")
+                        await cur.execute("UPDATE server_data SET status = %s WHERE id = %s", ("inactive", row[0]))
+                    elif row[6] == "inactive":
+                        pass
 
+async def task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if not user_id in config['gm_list']:
+        return
+    try:
+        status_task()
+    except Exception as e:
+        bb = e
+    else:
+        bb = "执行完成"
+    update.message.reply_text(bb)
 
-async def white_add(update: Update, context: ContextTypes):
+async def white_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if not user_id in config['gm_list']:
         return
@@ -756,7 +807,7 @@ async def white_add(update: Update, context: ContextTypes):
     nn = "\n".join(n)
     await update.message.reply_text(f"添加成功，新增用户：\n{nn}\n已添加的用户：{yy}")
 
-async def white_del(update: Update, context: ContextTypes):
+async def white_del(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if not user_id in config['gm_list']:
         return
@@ -777,7 +828,7 @@ async def white_del(update: Update, context: ContextTypes):
     else:
         await update.message.reply_text("还未创建白名单")
 
-async def ban_add(update: Update, context: ContextTypes):
+async def ban_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if not user_id in config['gm_list']:
         return
@@ -804,7 +855,7 @@ async def ban_add(update: Update, context: ContextTypes):
     nn = "\n".join(n)
     await update.message.reply_text(f"添加成功，封禁用户：\n{nn}\n已封禁的用户：{yy}")
 
-async def ban_del(update: Update, context: ContextTypes):
+async def ban_del(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if not user_id in config['gm_list']:
         return
@@ -825,7 +876,7 @@ async def ban_del(update: Update, context: ContextTypes):
     else:
         await update.message.reply_text("还未创建黑名单")
 
-async def server_list(update: Update, context: ContextTypes):
+async def server_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
@@ -847,10 +898,10 @@ async def server_list(update: Update, context: ContextTypes):
             message = f"当前共有 **{len(result)}** 个后端节点\n✅在线可用有 **{active}** 个\n❎掉线或状态异常有 **{inactive}** 个\n❎gp不足有 **{gp_inactive}** 个"
             await update.message.reply_markdown(text=message)
 
-async def help_(update: Update, context: ContextTypes):
+async def help_(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_markdown(text=f"此bot为分布式eh归档链接获取bot\n基于[此项目](https://github.com/mhdy2233/tg-eh-distributed-arc-bot)制作")
 
-async def del_client(update: Update, context: ContextTypes):
+async def del_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
@@ -867,7 +918,7 @@ async def del_client(update: Update, context: ContextTypes):
                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击停用", callback_data=f"yes_del|{result[0]}")], [InlineKeyboardButton("取消", callback_data="del")]])
                 await update.message.reply_text(text="您确定要停用后端节点吗？", reply_markup=keyboard)
 
-async def start_client(update: Update, context: ContextTypes):
+async def start_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
@@ -886,15 +937,15 @@ async def start_client(update: Update, context: ContextTypes):
                     [InlineKeyboardButton("点击修改addr", callback_data="addr")],
                     [InlineKeyboardButton("点击修改token", callback_data="token")]
                 ])
-                await update.message.reply_text(text=f"当前client信息如下：\naddr(地址)：{result[4]}\ntoken(key)：{result[5]}\n状态：{result[8]}", reply_markup=keyboard)
+                await update.message.reply_text(text=f"当前client信息如下：\naddr(地址)：{result[4]}\ntoken(key)：{result[5]}\n是否启用：{result[8]}\n在线状态：{result[6]}\ngp状态：{result[7]}", reply_markup=keyboard)
 
-async def addr_client(update: Update, context: ContextTypes):
+async def addr_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()  # 关闭加载动画
     await query.edit_message_text("请输入addr(地址)：\n/cancel 取消")
     return "ssss"
 
-async def addr_client_yes(update: Update, context: ContextTypes):
+async def addr_client_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text
     if not url:
         await update.message.reply_text("请输入addr(地址)...")
@@ -912,13 +963,13 @@ async def addr_client_yes(update: Update, context: ContextTypes):
             await update.message.reply_text(status)
             return ConversationHandler.END
 
-async def token_client(update: Update, context: ContextTypes):
+async def token_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()  # 关闭加载动画
     await query.edit_message_text("请输入token(key)：\n/cancel 取消")
     return "zzzz"
 
-async def token_client_yes(update: Update, context: ContextTypes):
+async def token_client_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     token = update.message.text
     if not token:
         await update.message.reply_text("请输入token(key)...")
@@ -936,7 +987,7 @@ async def token_client_yes(update: Update, context: ContextTypes):
             await update.message.reply_text(status)
             return ConversationHandler.END
 
-async def last_page(update: Update, context: ContextTypes):
+async def last_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
@@ -965,7 +1016,7 @@ async def last_page(update: Update, context: ContextTypes):
                         media_group.append(InputMediaPhoto(media=result_[4], caption=caption, parse_mode='HTML'))
                 await update.message.reply_media_group(media=media_group)
 
-async def popular(update: Update, context: ContextTypes):
+async def popular(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
@@ -1003,7 +1054,7 @@ async def popular(update: Update, context: ContextTypes):
                         media_group.append(InputMediaPhoto(media=result_[4], caption=caption, parse_mode='HTML'))
                 await update.message.reply_media_group(media=media_group)
 
-async def check_in(update: Update, context: ContextTypes):
+async def check_in(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global db_pool
     if not db_pool:
         print("❌ 数据库未连接！")
@@ -1015,7 +1066,7 @@ async def check_in(update: Update, context: ContextTypes):
     else:
         await update.message.reply_text(num)
 
-async def add_gp(update: Update, context: ContextTypes):
+async def add_gp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if not update.message.from_user.id in config['gm_list']:
         pass
@@ -1033,7 +1084,7 @@ async def add_gp(update: Update, context: ContextTypes):
                 await cur.execute("UPDATE user_data SET user_gp = %s WHERE user_id = %s", (int(args[1]) + result[4], args[0]))
                 await update.message.reply_text(f"添加成功现在一共有：{int(args[1]) + result[4]}GP")
 
-async def inline_query(update: Update, context: CallbackContext):
+async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """处理内联查询，返回 web 相关的选项"""
     # 获取内联查询对象
     
@@ -1079,11 +1130,17 @@ async def inline_query(update: Update, context: CallbackContext):
                 cs = await page(gid=gid, token=token, context=context, user_id=user_id)
                 json_data = await eh_meta(gid, token)
                 formatted_json = f"<blockquote expandable>{json.dumps(json_data, indent=4)}</blockquote>"
-                if len(cs) == 4:
-                    keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("点击跳转画廊", url=url)],
-                        [InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
-                    ])
+                if len(cs) == 5:
+                    if cs[4]:
+                        keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("点击跳转画廊", url=cs[4]),
+                            InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
+                            ])
+                    else:
+                        keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("点击跳转画廊", url=url),
+                            InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
+                            ])
                     results = [
                         InlineQueryResultPhoto(
                             id=str(uuid.uuid4()),  # 唯一 ID
@@ -1117,7 +1174,7 @@ async def inline_query(update: Update, context: CallbackContext):
                     ]
                     await update.inline_query.answer(results, cache_time=0)
 
-async def my_info(update: Update, context: CallbackContext):
+async def my_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     username = update.message.from_user.username
     text = await my_info_text_(user_id=user_id, username=username)
@@ -1157,9 +1214,28 @@ async def register_commands(app):
     """异步注册命令"""
     await app.bot.set_my_commands(COMMANDS)
 
+async def on_mysql(update: Update):
+    user_id = update.message.from_user.id
+    if not user_id in config['gm_list']:
+        return
+    global db_pool
+    db_pool = await init_db_pool()
+    if db_pool:
+        await update.message.reply_text("数据库已启用")
+
+async def off_mysql(update: Update):
+    user_id = update.message.from_user.id
+    if not user_id in config['gm_list']:
+        return
+    global db_pool
+    if db_pool:
+        db_pool.close()
+        await db_pool.wait_closed()
+        await update.message.reply_text("数据库已关闭")
+
 def main():
     """主函数"""
-    app = Application.builder().token(bot_token).build()
+    app = Application.builder().token(bot_token).request(HTTPXRequest(connect_timeout=30,read_timeout=30,pool_timeout=30)).build()
 
     # 添加命令处理器
     app.add_handler(CommandHandler("start", start))
@@ -1176,6 +1252,9 @@ def main():
     app.add_handler(CommandHandler("del_client", del_client))
     app.add_handler(CommandHandler("start_client", start_client))
     app.add_handler(CommandHandler("add_gp", add_gp))
+    app.add_handler(CommandHandler("on_mysql", on_mysql))
+    app.add_handler(CommandHandler("off_mysql", off_mysql))
+    app.add_handler(CommandHandler("task", task))
 
     app.add_handler(join_handler)
     app.add_handler(addr_handler)

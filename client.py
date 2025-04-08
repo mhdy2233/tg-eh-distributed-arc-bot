@@ -2,6 +2,7 @@ import requests, logging
 from bs4 import BeautifulSoup
 from flask import request, Flask, jsonify, redirect
 from flask_cors import CORS
+from datetime import datetime, timedelta, timezone
 
 key = "1234"
 port = 11451
@@ -15,6 +16,33 @@ proxies = {
     # "http": "http://127.0.0.1:8080",
     # "https": "http://127.0.0.1:8080"
 }
+
+# 定义上海时区（UTC+8）
+SHANGHAI_TZ = timezone(timedelta(hours=8))
+
+# 自定义 formatter 以使用上海时间
+class ShanghaiFormatter(logging.Formatter):
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, SHANGHAI_TZ)
+        if datefmt:
+            s = dt.strftime(datefmt)
+        else:
+            s = dt.isoformat()
+        return s
+
+# 设置日志格式和 handler
+log_format = "[%(asctime)s] [%(levelname)s] %(message)s"
+date_format = "%Y-%m-%d %H:%M:%S"
+
+handler = logging.FileHandler("eh_arc_log.txt")
+handler.setFormatter(ShanghaiFormatter(log_format, datefmt=date_format))
+
+# 应用日志配置
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[handler]
+)
+
 def detection(gid,token,clarity,use_gp):
     # 检测是否有下载链接
     arc_url = "https://exhentai.org/archiver.php" + f"?gid={gid}" + f"&token={token}"
@@ -32,7 +60,7 @@ def detection(gid,token,clarity,use_gp):
                     return False, f"GP不足，GP还剩余{[m_list[0]]}，C还剩余{[m_list[2]]}"
     if soup.find('a', onclick="return cancel_sessions()"):
         if refresh_url(gid=gid, token=token):
-            print("销毁成功")
+            logging.info("销毁成功")
         else:    
             return False, "链接销毁失败"
 
@@ -96,16 +124,19 @@ def process_data():
                 clarity = data['arc']
                 use_gp = data['use_gp']
                 link = detection(gid, token, clarity, use_gp)
-                print(link)
+                logging.info(f"获取到画廊请求:{gid}")
                 if link[0]:
+                    logging.info(f"请求成功{link}")
                     # 构造返回结果(返回画廊原图下载链接)
                     response = {
                         "link": link[1]
                     }
                     return jsonify(response)
                 else:
+                    logging.error(f"请求失败{link}")
                     return jsonify({"error": str(link[1])})
             else:
+                logging.error("密钥错误，获取归档失败！")
                 return jsonify({"error": "密钥错误！"})
         except Exception as e:
             return jsonify({"error": str(e)})
@@ -127,15 +158,16 @@ def status():
                     if "GP" in x.text and "Credits" in x.text:
                         m_list = x.text.replace("[", "").replace("]", "").replace("?", "").split()
                         if int(m_list[0].replace(",", "")) > 50000:
+                            logging.info("状态正常")
                             return jsonify({"status": 200})
                         else:
-                            print("GP小于50000无法加入")
+                            logging.error("GP小于50000无法加入")
                             return jsonify({"error": "GP小于50000"})
         else:
-            print("里站无内容，请检查cookie是否正确")
+            logging.error("里站无内容，请检查cookie是否正确")
             return jsonify({"error": "里站无内容，请检查cookie是否正确"})
     else:
-        print("密钥错误！")
+        logging.error("密钥错误！")
         return jsonify({"error": "密钥错误"})
 
 if __name__ == '__main__':

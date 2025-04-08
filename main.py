@@ -1,4 +1,4 @@
-import yaml, requests, random, re, io, time
+import yaml, requests, random, re, io, time, os, json
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, urlunparse
 from datetime import datetime
@@ -94,8 +94,8 @@ async def eh_page(gid, token):
             except:
                 message = None
             mes = f"{formatted_time} by：{time_str[1]}  {score}\n   {message}\n"
-            if len(com) + len(mes) > 1000:
-                break
+            if len(com) + len(mes) > 700:
+                continue
             else:
                 com += mes
         return image, caption, img_url, com
@@ -140,6 +140,9 @@ def eh_arc(gid, token):
     if strong[2].text == "Free!":
         original_gp = round(original_size / 0.063)
         resample_gp = round(resample_size / 0.063)
+    elif strong[2].text == "N/A" and strong[0].text == "Free!":
+        original_gp = round(int(strong[0].text.split(" ")[0].replace(",", "")))
+        resample_gp = "N/A"
     else:
         original_gp = round(int(strong[0].text.split(" ")[0].replace(",", "")))
         resample_gp = round(int(strong[2].text.split(" ")[0].replace(",", "")))
@@ -200,3 +203,30 @@ async def eh_page_meta(gid, token):
             labels.append("other:已删除")
         caption = [title1, title2, page_type, uploader, posted, size, pages, average, labels]
         return img_url, caption
+    
+async def eh_dmca(gid):
+    if os.path.exists("./ehdmca.json"):
+        with open("./ehdmca.json", 'r', encoding='utf-8') as f:
+            ehdmca = json.load(f)
+            if gid in ehdmca:
+                ehdmca_page = ehdmca[gid]
+                gg = ehdmca_page['archive'].split('<')
+                if gg[0] == "chaika":
+                    return gg[1].replace('>', '')
+                elif gg[0] == "local" or gg[0] == "":
+                    return None
+                else:
+                    if "in" in gg[0]:
+                        zs = gg[0].split(' in ')
+                        if zs[1] == "DMCA":
+                            return None
+                        else:
+                            url = "https://pan1.mhdy.shop/主要/本子/eh_DMCA/" + zs[1] + f"/{zs[0]}_{ehdmca_page['title'].replace("|", "")}.zip"
+                            return url
+                    else:
+                        url = "https://pan1.mhdy.shop/主要/本子/eh_DMCA/" + gg[0] + f"/{gid}_{ehdmca_page['title'].replace("|", "")}.zip"
+                        return url
+            else:
+                return None
+    else:
+        return None
