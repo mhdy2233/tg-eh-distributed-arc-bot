@@ -28,7 +28,7 @@ async def addr_status(addr,token):
     }
     url = addr + "/api/status"
     try:
-        ceshi = requests.post(url, json=data, timeout=5).json()
+        ceshi = requests.post(url, json=data, timeout=10).json()
     except requests.exceptions.InvalidSchema:
         return "地址无效"
     except requests.exceptions.Timeout:

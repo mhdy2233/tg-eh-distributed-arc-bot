@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 key = "1234"
 port = 11451
+num = 3 # 尝试次数
 eh_cookie = {
     "ipb_member_id": "",
     "ipb_pass_hash": "",
@@ -162,23 +163,45 @@ def process_data():
 def status():
     data = request.get_json()
     if data["key"] == key:
-        ceshi = requests.get("https://exhentai.org", cookies=eh_cookie, proxies=proxies)
-        if ceshi.status_code == 200:
-            cc = requests.get("https://e-hentai.org/archiver.php?gid=3285402&token=9cf3194f42", cookies=eh_cookie, proxies=proxies)
-            if cc.status_code ==200:
-                soup = BeautifulSoup(cc.text, 'html.parser')
-                for x in soup.find_all('p'):
-                    if "GP" in x.text and "Credits" in x.text:
-                        m_list = x.text.replace("[", "").replace("]", "").replace("?", "").split()
-                        if int(m_list[0].replace(",", "")) > 50000:
-                            logging.info("状态正常")
-                            return jsonify({"status": 200})
-                        else:
-                            logging.error("GP小于50000无法加入")
-                            return jsonify({"error": "GP小于50000"})
-        else:
-            logging.error("里站无内容，请检查cookie是否正确")
-            return jsonify({"error": "里站无内容，请检查cookie是否正确"})
+        while True:
+            ceshi = requests.get("https://exhentai.org", cookies=eh_cookie, proxies=proxies)
+            if ceshi.status_code == 200:
+                if not ceshi.text:
+                    num -=1
+                    if num <= 0:
+                        logging.error("里站无内容，请检查cookie是否正确")
+                        return jsonify({"error": "里站无内容，请检查cookie是否正确"})
+                    else:
+                        continue
+                cc = requests.get("https://e-hentai.org/archiver.php?gid=3285402&token=9cf3194f42", cookies=eh_cookie, proxies=proxies)
+                if cc.status_code ==200:
+                    if "login" in cc.url:
+                        logging.error("请求表站跳转登录，请检查cookie")
+                        return jsonify({"error": "请求表站跳转登录，请检查cookie"})
+                    soup = BeautifulSoup(cc.text, 'html.parser')
+                    for x in soup.find_all('p'):
+                        if "GP" in x.text and "Credits" in x.text:
+                            m_list = x.text.replace("[", "").replace("]", "").replace("?", "").split()
+                            if int(m_list[0].replace(",", "")) > 50000:
+                                logging.info("状态正常")
+                                return jsonify({"status": 200})
+                            else:
+                                logging.error("GP小于50000无法加入")
+                                return jsonify({"error": "GP小于50000"})
+                else:
+                    num -=1
+                    if num <= 0:
+                        logging.error("表站请求出错，检查网络")
+                        return jsonify({"error": "表站请求出错，检查网络"})
+                    else:
+                        continue
+            else:
+                num -=1
+                if num <= 0:
+                    logging.error("里站请求出错，检查网络")
+                    return jsonify({"error": "里站请求出错，检查网络"})
+                else:
+                    continue
     else:
         logging.error("密钥错误！")
         return jsonify({"error": "密钥错误"})
