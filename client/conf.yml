@@ -4,6 +4,8 @@ port: 11451 # 端口
 
 num: 3 # 错误尝试次数
 
+Free: False # True为只接受免费配额，False为全部接受
+
 eh_cookies: [{  # eh_cookie可以为多个，请使用里站cookie，如果你的网络可以直接更新里站cookie那么igneous可以不填写。
   ipb_member_id: "",
   ipb_pass_hash: "",

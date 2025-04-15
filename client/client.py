@@ -44,8 +44,15 @@ def detection(gid,token,clarity,use_gp,eh_cookie):
     arc_url = "https://exhentai.org/archiver.php" + f"?gid={gid}" + f"&token={token}"
     response = requests.get(arc_url, cookies=eh_cookie, proxies=proxies)
     soup = BeautifulSoup(response.text, 'html.parser')
-    free = soup.find('strong')
-    if not free.text == "Free!":
+    free = soup.find_all('strong')
+    if config['Free']:
+        if clarity == "original":
+            if free[0].text == "Free!":
+                return False, "Free"
+        elif clarity == "resample":
+            if free[0].text == "Free!":
+                return False, "Free"
+    if not free[0].text == "Free!":
         url = "https://e-hentai.org/archiver.php?gid=3285545&token=7745b19f1e"
         response = requests.get(url, cookies=eh_cookie, proxies=proxies)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -80,10 +87,15 @@ def download_url(gid,token,clarity,eh_cookie):
     # 对下载原始图像进行post请求
     if response.status_code == 200:
         logging.info("请求原始图像成功")
-        soup = BeautifulSoup(response.text, 'html.parser')
-        url = soup.find('a')["href"]
-        link_original = url + "?start=1"
-        return True, link_original
+        if response.text != "You do not have enough funds to download this archive. Obtain some Credits or GP and try again.":
+            soup = BeautifulSoup(response.text, 'html.parser')
+            url = soup.find('a')["href"]
+            link_original = url + "?start=1"
+            return True, link_original
+        elif "This IP address has been" in response.text:
+            return False, "IP频率过高"
+        else:
+            return False, "GP不足"
     else:
         code = response.status_code
         logging.error(f"请求原始图像失败，错误代码为：{code}")

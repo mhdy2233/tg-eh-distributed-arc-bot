@@ -625,7 +625,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     nnn = 0
                     while True:
-                        if nnn == 5:
+                        if nnn >= 5:
                             for x in config['gm_list']:
                                 await context.bot.send_message(chat_id=x, text=f"{gid}画廊超过5次获取归档失败！请检查日志")
                         await cur.execute("SELECT * FROM server_data WHERE status = 'active' AND gp_status = 'active' ORDER BY RAND() LIMIT 1")
@@ -647,6 +647,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             else:
                                 if "GP不足" in link[1]:
                                     await cur.execute("UPDATE server_data SET gp_status = %s WHERE user_id = %s", ("inactive", server_user_id))
+                                elif "Free" in link[1]:
+                                    continue
                                 else:
                                     await cur.execute("UPDATE server_data SET status = %s WHERE user_id = %s", ("inactive", server_user_id))
                                 await context.bot.send_message(chat_id=server_user_id, text=link[1])
