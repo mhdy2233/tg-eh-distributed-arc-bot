@@ -28,7 +28,7 @@ async def addr_status(addr,token):
     }
     url = addr + "/api/status"
     try:
-        ceshi = requests.post(url, json=data, timeout=10).json()
+        ceshi = requests.post(url, json=data, timeout=15).json()
     except requests.exceptions.InvalidSchema:
         return "地址无效"
     except requests.exceptions.Timeout:
@@ -41,7 +41,11 @@ async def addr_status(addr,token):
         if ceshi.get("status", 0) == 200:
             return 200
         else:
-            return ceshi['error']
+            text = ceshi.get('error')
+            if not text:
+                return ceshi.text
+            else:
+                return ceshi['error']
     
 async def eh_page(gid, token):
     eh_cookie = random.choice(config['eh_cookies'])
@@ -61,7 +65,10 @@ async def eh_page(gid, token):
         title1 = soup.find('h1', id='gn').text   # 主标题
         title2 = soup.find('h1', id='gj').text   # 副标题
         page_type = soup.find('div', id='gdc').text.lower()  # 画廊类型
-        uploader = f"<a href='{soup.find('div', id='gdn').find('a')['href']}'>{soup.find('div', id='gdn').find('a').text}</a>"    # 上传者
+        if soup.find('div', id='gdn').text == "Disowned":
+            uploader = "已弃用"
+        else:
+            uploader = f"<a href='{soup.find('div', id='gdn').find('a')['href']}'>{soup.find('div', id='gdn').find('a').text}</a>"    # 上传者
         posted = soup.find_all('td', class_='gdt2')[0].text   # 上传时间
         language = soup.find_all('td', class_='gdt2')[3].text.lower()   # 语言
         size = soup.find_all('td', class_='gdt2')[4].text   # 大小
@@ -75,30 +82,7 @@ async def eh_page(gid, token):
             b = tag_type + tags
             labels.append(b)
         caption = [title1, title2, page_type, uploader, posted, language, size, pages, favorited, average, labels]
-        comment = soup.find('div', id='cdiv').find_all('div', class_='c1')
-        com = ""
-        for x in comment:
-            tt = x.find('div', class_='c3').decode_contents()
-            # 提取时间字符串
-            time_str = tt.split("Posted on ")[1].split(" by:")  # '01 April 2022, 20:15'
-            # 解析时间
-            dt = datetime.strptime(time_str[0], "%d %B %Y, %H:%M")
-            # 转换为标准格式
-            formatted_time = dt.strftime("%Y-%m-%d %H:%M:%S")
-            try:
-                score = x.find('div', class_='c5').text
-            except AttributeError:
-                score = None
-            try:
-                message = x.find('div', class_='c6').text
-            except:
-                message = None
-            mes = f"{formatted_time} by：{time_str[1]}  {score}\n   {message}\n"
-            if len(com) + len(mes) > 700:
-                continue
-            else:
-                com += mes
-        return image, caption, img_url, com
+        return image, caption, img_url
     elif eh.status_code == 403:
         return 403
     elif eh.status_code == 404:

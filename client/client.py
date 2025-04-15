@@ -1,4 +1,4 @@
-import requests, logging
+import requests, logging, yaml, random
 from bs4 import BeautifulSoup
 from flask import request, Flask, jsonify, redirect
 from flask_cors import CORS
@@ -6,19 +6,9 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from datetime import datetime, timedelta, timezone
 
-key = "1234"
-port = 11451
-num = 3 # 尝试次数
-eh_cookie = {
-    "ipb_member_id": "",
-    "ipb_pass_hash": "",
-    "igneous": ""
-}
-proxies = {
-    # 不用的时候就#
-    # "http": "http://127.0.0.1:8080",
-    # "https": "http://127.0.0.1:8080"
-}
+with open("./config.yml", 'r', encoding='utf-8') as f:
+    config = yaml.safe_load(f)
+proxies = config['proxies']
 
 # 定义上海时区（UTC+8）
 SHANGHAI_TZ = timezone(timedelta(hours=8))
@@ -49,7 +39,7 @@ logging.basicConfig(
     handlers=[handler, console]
 )
 
-def detection(gid,token,clarity,use_gp):
+def detection(gid,token,clarity,use_gp,eh_cookie):
     # 检测是否有下载链接
     arc_url = "https://exhentai.org/archiver.php" + f"?gid={gid}" + f"&token={token}"
     response = requests.get(arc_url, cookies=eh_cookie, proxies=proxies)
@@ -65,15 +55,15 @@ def detection(gid,token,clarity,use_gp):
                 if m_list[0] - use_gp < 0:
                     return False, f"GP不足，GP还剩余{[m_list[0]]}，C还剩余{[m_list[2]]}"
     if soup.find('a', onclick="return cancel_sessions()"):
-        if refresh_url(gid=gid, token=token):
+        if refresh_url(gid=gid, token=token, eh_cookie=eh_cookie):
             logging.info("销毁成功")
         else:    
             return False, "链接销毁失败"
 
-    link = download_url(gid,token,clarity)
+    link = download_url(gid,token,clarity,eh_cookie)
     return link
 
-def download_url(gid,token,clarity):
+def download_url(gid,token,clarity,eh_cookie):
     # 获取下载链接
     if clarity == "original":
         clarity = "Original"
@@ -99,7 +89,7 @@ def download_url(gid,token,clarity):
         logging.error(f"请求原始图像失败，错误代码为：{code}")
         return False, code
 
-def refresh_url(gid, token):
+def refresh_url(gid, token, eh_cookie):
     # 销毁下载链接
     payload = {
         "invalidate_sessions": 1,
@@ -131,16 +121,17 @@ def process_data():
             if not data:
                 return jsonify({"error": "请求体不能为空"})
             
-            if data["key"] == key:
+            if data["key"] == config['key']:
                 # 处理数据（获取gid和token然后获取下载链接）
                 gid = data['gid']
                 token = data['token']
                 clarity = data['arc']
                 use_gp = data['use_gp']
-                link = detection(gid, token, clarity, use_gp)
+                eh_cookie = random.choice(config['eh_cookies'])
+                link = detection(gid, token, clarity, use_gp, eh_cookie)
                 logging.info(f"获取到画廊请求:{gid}")
                 if link[0]:
-                    logging.info(f"请求成功{link}")
+                    logging.info(f"请求成功, 使用cookie_id为：{eh_cookie['ipb_member_id']}, 链接为：{link}")
                     # 构造返回结果(返回画廊原图下载链接)
                     response = {
                         "link": link[1]
@@ -162,49 +153,50 @@ def process_data():
 @app.route('/api/status', methods=['POST'])
 def status():
     data = request.get_json()
-    if data["key"] == key:
-        while True:
-            ceshi = requests.get("https://exhentai.org", cookies=eh_cookie, proxies=proxies)
-            if ceshi.status_code == 200:
-                if not ceshi.text:
-                    num -=1
-                    if num <= 0:
-                        logging.error("里站无内容，请检查cookie是否正确")
-                        return jsonify({"error": "里站无内容，请检查cookie是否正确"})
+    if data["key"] == config['key']:
+        for eh_cookie in config['eh_cookies']:
+            while True:
+                ceshi = requests.get("https://exhentai.org", cookies=eh_cookie, proxies=proxies)
+                if ceshi.status_code == 200:
+                    if not ceshi.text:
+                        num -=1
+                        if num <= 0:
+                            logging.error(f"cookie_id为：{eh_cookie['ipb_member_id']}, 里站无内容，请检查cookie是否正确")
+                            return jsonify({"error": f"cookie_id为：{eh_cookie['ipb_member_id']}, 里站无内容，请检查cookie是否正确"})
+                        else:
+                            continue
+                    cc = requests.get("https://e-hentai.org/archiver.php?gid=3285402&token=9cf3194f42", cookies=eh_cookie, proxies=proxies)
+                    if cc.status_code ==200:
+                        if "login" in cc.url:
+                            logging.error(f"cookie_id为：{eh_cookie['ipb_member_id']}, 请求表站跳转登录，请检查cookie")
+                            return jsonify({"error": f"cookie_id为：{eh_cookie['ipb_member_id']}, 请求表站跳转登录，请检查cookie"})
+                        soup = BeautifulSoup(cc.text, 'html.parser')
+                        for x in soup.find_all('p'):
+                            if "GP" in x.text and "Credits" in x.text:
+                                m_list = x.text.replace("[", "").replace("]", "").replace("?", "").split()
+                                if int(m_list[0].replace(",", "")) > 50000:
+                                    logging.info("状态正常")
+                                    return jsonify({"status": 200})
+                                else:
+                                    logging.error(f"cookie_id为：{eh_cookie['ipb_member_id']}, GP小于50000无法加入")
+                                    return jsonify({"error": f"cookie_id为：{eh_cookie['ipb_member_id']}, GP小于50000"})
                     else:
-                        continue
-                cc = requests.get("https://e-hentai.org/archiver.php?gid=3285402&token=9cf3194f42", cookies=eh_cookie, proxies=proxies)
-                if cc.status_code ==200:
-                    if "login" in cc.url:
-                        logging.error("请求表站跳转登录，请检查cookie")
-                        return jsonify({"error": "请求表站跳转登录，请检查cookie"})
-                    soup = BeautifulSoup(cc.text, 'html.parser')
-                    for x in soup.find_all('p'):
-                        if "GP" in x.text and "Credits" in x.text:
-                            m_list = x.text.replace("[", "").replace("]", "").replace("?", "").split()
-                            if int(m_list[0].replace(",", "")) > 50000:
-                                logging.info("状态正常")
-                                return jsonify({"status": 200})
-                            else:
-                                logging.error("GP小于50000无法加入")
-                                return jsonify({"error": "GP小于50000"})
+                        num -=1
+                        if num <= 0:
+                            logging.error(f"cookie_id为：{eh_cookie['ipb_member_id']}, 表站请求出错，检查网络")
+                            return jsonify({"error": f"cookie_id为：{eh_cookie['ipb_member_id']}, 表站请求出错，检查网络"})
+                        else:
+                            continue
                 else:
                     num -=1
                     if num <= 0:
-                        logging.error("表站请求出错，检查网络")
-                        return jsonify({"error": "表站请求出错，检查网络"})
+                        logging.error(f"cookie_id为：{eh_cookie['ipb_member_id']}, 里站请求出错，检查网络")
+                        return jsonify({"error": f"cookie_id为：{eh_cookie['ipb_member_id']}, 里站请求出错，检查网络"})
                     else:
                         continue
-            else:
-                num -=1
-                if num <= 0:
-                    logging.error("里站请求出错，检查网络")
-                    return jsonify({"error": "里站请求出错，检查网络"})
-                else:
-                    continue
-    else:
-        logging.error("密钥错误！")
-        return jsonify({"error": "密钥错误"})
+        else:
+            logging.error("密钥错误！")
+            return jsonify({"error": "密钥错误"})
 
 if __name__ == '__main__':
-    app.run(debug=True,host='0.0.0.0', port=port)
+    app.run(debug=True,host='0.0.0.0', port=config['port'])

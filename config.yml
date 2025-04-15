@@ -2,7 +2,8 @@ bot_token: '' # bot token
 bot_username: "" # bot用户名，去除@
 my_chat: "" # 公开频道的用户名，bot需为频道管理员
 gm_list: [] # 管理员列表
-
+s_GP: 5000  # 签到最少GP
+b_GP: 15000 # 签到最多GP
 eh_cookies: [{  # eh_cookie可以为多个，请使用里站cookie，如果你的网络可以直接更新里站cookie那么igneous可以不填写。
   ipb_member_id: "",
   ipb_pass_hash: "",

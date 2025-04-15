@@ -1,0 +1,18 @@
+key: "1234" # 密钥
+
+port: 11451 # 端口
+
+num: 3 # 错误尝试次数
+
+eh_cookies: [{  # eh_cookie可以为多个，请使用里站cookie，如果你的网络可以直接更新里站cookie那么igneous可以不填写。
+  ipb_member_id: "",
+  ipb_pass_hash: "",
+  igneous: "",
+  }
+]
+
+proxies: {
+    # 不用的时候就#
+    # "http": "http://127.0.0.1:8080",
+    # "https": "http://127.0.0.1:8080"
+}
