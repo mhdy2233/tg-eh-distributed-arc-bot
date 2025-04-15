@@ -937,7 +937,7 @@ async def server_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     gp_inactive += 1
             with open("./white.json", 'r', encoding='utf-8') as f:
                 white_list = json.load(f)
-            if update.message.from_user.id in white_list and update.message.chat.type == "private":
+            if (str(update.message.from_user.id) in white_list) and update.message.chat.type == "private":
                 mes = ""
                 for x in result:
                     if x[3]:
