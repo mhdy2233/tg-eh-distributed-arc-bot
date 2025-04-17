@@ -1,0 +1,22 @@
+port: 11919
+
+mysql:
+  host: "127.0.0.1"  # MySQL 地址
+  prot: 3306         # MySQL 端口
+  user: "root"       # MySQL 用户名
+  password: "1234"  # MySQL 密码
+  db: "eh_arc" # 数据库名称
+
+eh_cookies: [{
+  ipb_member_id: "",
+  ipb_pass_hash: "",
+  igneous: "",
+  star: "",
+  sk: ""}
+]
+
+proxy: [{ # 同cookie，注释则为空
+  # http: "http://127.0.0.1:8080"
+  # https: "http://127.0.0.1:8080"
+  }
+]

@@ -70,7 +70,7 @@ async def eh_page(gid, token):
         else:
             uploader = f"<a href='{soup.find('div', id='gdn').find('a')['href']}'>{soup.find('div', id='gdn').find('a').text}</a>"    # 上传者
         posted = soup.find_all('td', class_='gdt2')[0].text   # 上传时间
-        language = soup.find_all('td', class_='gdt2')[3].text.lower()   # 语言
+        language = soup.find_all('td', class_='gdt2')[3].text.lower()[:-4]   # 语言
         size = soup.find_all('td', class_='gdt2')[4].text   # 大小
         pages = soup.find_all('td', class_='gdt2')[5].text.split(" ")[0]   # 页数
         favorited = soup.find_all('td', class_='gdt2')[6].text.split(" ")[0]   # 收藏数
