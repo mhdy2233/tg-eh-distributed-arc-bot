@@ -640,7 +640,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
                                 await cur.execute("UPDATE user_data SET user_gp = %s, use_gps = %s, use_num = %s, use_time = %s WHERE user_id = %s", (remnant_gp, user_data[5] + int(use_gp), user_data[6] + 1, shanghai_time, query.from_user.id))
                                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
-                                await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1]}", reply_markup=keyboard, disable_web_page_preview=True, reply_to_message_id=query.message.message_id)
+                                await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1][:-9] + "2" + link[1][-9 +1:]}\n?号前数字为0-3, 分别为英文原图, 英文重采样, 日文原图, 日文重采样可以自己根据需要修改(不用试了不存在白嫖GP的bug)。", reply_markup=keyboard, disable_web_page_preview=True, reply_to_message_id=query.message.message_id)
                                 await cur.execute("UPDATE server_data SET use_gps = %s WHERE user_id = %s", (result[9] + int(use_gp), server_user_id))
                                 await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], int(query.from_user.id), context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp) ))
                                 break
@@ -1087,6 +1087,9 @@ async def add_gp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not db_pool:
         print("❌ 数据库未连接！")
         return
+    if not len(args) ==2:
+        await update.message.reply_text("未输入用户id或GP数量或格式不正确")
+        return
     async with db_pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute("SELECT * FROM user_data WHERE user_id = %s", (args[0]))
@@ -1220,8 +1223,8 @@ async def give_GP(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("❌ 数据库未连接！")
         return
     args = context.args
-    if not args:
-        await update.message.reply_text("请输入用户id和GP数量")
+    if not len(args) ==2:
+        await update.message.reply_text("未输入用户id或GP数量或格式不正确")
         return
     async with db_pool.acquire() as conn:
         async with conn.cursor() as cur:

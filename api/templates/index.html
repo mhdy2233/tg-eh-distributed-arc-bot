@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>数据库展示 + API调用</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        /* 保证自动换行 */
+        .text-wrap {
+            white-space: normal;
+            word-break: break-word;
+        }
+        
+        /* 限制宽度最大值，支持自适应 */
+        .title-limit {
+            max-width: 100%;        /* 不超过父容器 */
+            min-width: 0;
+            display: block;         /* 允许多行撑开 */
+            -webkit-line-clamp: 2;
+            font-size: 1rem;
+            line-height: 1.2;
+        }
+
+        .card-img-top {
+            width: 100%;
+            height: 200px;               /* 固定高度或使用 max-height */
+            object-fit: contain;           /* 缩放 */
+            border-radius: 6px;          /* 可选，加点圆角 */
+        }
+
+        /* 每行显示5列（自定义类） */
+        @media (min-width: 992px) {
+        .col-lg-2-4 {
+            flex: 0 0 20%;
+            max-width: 20%;
+        }
+        }
+
+        #api-form input {
+            font-size: 14px;
+        }
+        .card-title {
+        font-size: 18px;
+        }
+
+        /* 显示完整图片，不裁剪 */
+        .card-img-top-contain {
+            object-fit: contain !important;
+            height: auto;
+            max-height: 300px;
+            width: 100%;
+            background-color: #f8f9fa;
+        }
+
+        /* 缩小卡片字体 */
+        .card-body {
+            font-size: 14px;
+            line-height: 1.3;
+        }
+
+        /* tag行排版 */
+        .tag-line {
+            margin-bottom: 0.25rem;
+        }
+        </style>
+
+</head>
+<body class="p-5">
+    <div class="container mt-5">
+        <div class="row">
+            <!-- 左侧：API 输入卡片 -->
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">🌐 解析 画廊</h5>
+                    <form id="api-form">
+                    <input type="text" name="link" id="link" placeholder="输入 画廊 链接" class="form-control mb-2" required>
+                    <button type="submit" class="btn btn-primary w-100">解析 画廊</button>
+                    </form>
+                </div>
+                </div>
+            </div>
+        
+            <!-- 右侧：API 返回展示区域 -->
+            <div class="col-md-8">
+                <div id="api-result-container" class="row gy-4">
+                <!-- 动态插入卡片 -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <h2 align="center">📋 最近归档展示</h2>
+    <div class="container mt-4">
+        <div class="row g-3">
+            {% for item in data %}
+                <div class="col-6 col-lg-2-4"> <!-- 我会解释这个“2-4”写法 -->
+                <div class="card h-100">
+                    <div class="card-body p-2">
+                        <p class="card-text text-muted small">ID: {{ item.id }}</p>
+                        <h6 class="card-title text-wrap title-limit" style="font-size: 14px;"><a href="{{ item.url }}">{{ item.title1 }}</a></h6>
+                        <!-- 可加按钮或评分 -->
+                    </div>
+                    <a href = "{{ item.url }}">
+                        <img src="{{ item.image_url }}" class="card-img-top">
+                    </a>
+                </div>
+                </div>
+            {% endfor %}
+            </div>
+        </div>
+
+        <script>
+            document.getElementById("api-form").addEventListener("submit", async function (e) {
+                e.preventDefault();
+                const link = document.getElementById("link").value;
+            
+                const res = await fetch("/parse", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: new URLSearchParams({ link: link })
+                });
+            
+                const data = await res.json();  // ✅ 确认是这个结构！
+            
+                const container = document.getElementById("api-result-container");
+                container.innerHTML = `
+                    <div class="col-auto">
+                        <div class="card shadow-sm fixed-width-card">
+                        <img src="${data.image_url}" class="card-img-top card-img-top-contain" alt="图片">
+                        <div class="card-body">
+                            <h6 class="card-title mb-2">${data.title}</h6>
+                            <p class="card-text"><strong>上传者:</strong> ${data.uploader}</p>
+                            <p class="card-text"><strong>画廊类型:</strong> ${data.page_type}</p>
+                            <p class="card-text"><strong>上传时间:</strong> ${data.posted}</p>
+                            <p class="card-text"><strong>大小:</strong> ${data.size}</p>
+                            <p class="card-text"><strong>页数:</strong> ${data.pages}</p>
+                            <p class="card-text"><strong>评分:</strong> ${data.average}</p>
+                            <p class="card-text"><strong>tags:</strong></p>
+                            <div class="card-text">
+                            ${Object.entries(data.labels)
+                                .map(([key, values]) =>
+                                `<div class="tag-line"><strong>${key}：</strong> ${values.map(v => `<span class="badge bg-dark me-1">${v}</span>`).join("")}</div>`
+                                ).join("")}
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                    `;
+            });
+            </script>
+</body>
+</html>
