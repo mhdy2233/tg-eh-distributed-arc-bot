@@ -217,3 +217,28 @@ async def eh_dmca(gid):
                 return None
     else:
         return None
+
+async def get_eh_info(addr, token):
+    data = {
+        "key": token
+    }
+    url = addr + "/api/eh-info"
+    try:
+        ceshi = requests.post(url, json=data, timeout=15).json()
+    except requests.exceptions.InvalidSchema:
+        return "地址无效"
+    except requests.exceptions.Timeout:
+        return "超时"
+    except requests.exceptions.MissingSchema:
+        return "不是https?://url格式"
+    except Exception as e:
+        return e
+    else:
+        if ceshi.get("code", 0) == 200:
+            return ceshi['json']
+        else:
+            text = ceshi.get('message')
+            if not text:
+                return ceshi.text
+            else:
+                return ceshi['message']

@@ -1,8 +1,8 @@
 import requests, os, json, re, yaml, random, io, time
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto, InlineQueryResultsButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto, InlineQueryResultsButton, BotCommandScopeDefault, BotCommandScopeChat
 from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, filters, InlineQueryHandler
 from telegram.request import HTTPXRequest
-from main import addr_status, eh_page, eh_arc, arc_download, eh_meta, eh_page_meta, eh_dmca
+from main import addr_status, eh_page, eh_arc, arc_download, eh_meta, eh_page_meta, eh_dmca, get_eh_info
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
@@ -27,12 +27,35 @@ COMMANDS = [
     BotCommand("my_info", "查看我的信息"),
     BotCommand("give_gp", "[用户id] [GP数量] 赠送GP"),
     BotCommand("help", "获取帮助信息"),
+]
+
+ADMIN_COMMANDS = [
+    BotCommand("start", "开始使用机器人"),
+    BotCommand("check_in", "签到"),
+    BotCommand("popular", "获取最近一周最热门的5个"),
+    BotCommand("last_page", "查看最新下载的5个画廊"),
+    BotCommand("server_list", "查看后端列表"),
+    BotCommand("my_info", "查看我的信息"),
+    BotCommand("give_gp", "[用户id] [GP数量] 赠送GP"),
+    BotCommand("help", "获取帮助信息"),
     BotCommand("join", "添加节点"),
     BotCommand("white_add", "id 添加白名单(多个用空格分隔)"),
     BotCommand("white_del", "id 移除白名单(多个用空格分隔)"),
     BotCommand("ban", "id 添加黑名单(多个用空格分隔)"),
     BotCommand("ban_del", "id 移除黑名单(多个用空格分隔)"),
     BotCommand("add_gp", "[用户id] [gp数量] 添加gp"),
+]
+
+WHITE_COMMANDS = [
+    BotCommand("start", "开始使用机器人"),
+    BotCommand("check_in", "签到"),
+    BotCommand("popular", "获取最近一周最热门的5个"),
+    BotCommand("last_page", "查看最新下载的5个画廊"),
+    BotCommand("server_list", "查看后端列表"),
+    BotCommand("my_info", "查看我的信息"),
+    BotCommand("give_gp", "[用户id] [GP数量] 赠送GP"),
+    BotCommand("help", "获取帮助信息"),
+    BotCommand("join", "添加节点"),
 ]
 
 tag_dict = {
@@ -1243,6 +1266,28 @@ async def give_GP(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text(f"🎁赠送给用户: {args[0]} GP: {args[1]}成功，现剩余{result[4] - int(args[1])}GP")
                     await context.bot.send_message(text=f"🎁用户: {user_id} 赠送给你{args[1]}GP，现在共有{result[4] - int(args[1])}GP", chat_id=args[0])
 
+async def eh_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global db_pool
+    if not db_pool:
+        print("❌ 数据库未连接！")
+        return
+    if os.path.exists("./white.json"):
+        with open("./white.json", 'r', encoding='utf-8') as f:
+            white_list = json.load(f)
+    if str(update.message.from_user.id) in white_list:
+        async with db_pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT * FROM server_data WHERE user_id = %s", (update.message.from_user.id))  # 查询所有数据
+                result = await cur.fetchone()  # 获取所有行
+                if result:
+                    addr, token = result[4], result[5]
+                    res = await get_eh_info(addr, token)
+                    if type(res) == dict:
+                        message = f"<blockquote expandable>GP: \n总GP: {res['gp']['gp']}\n已用GP: {res['gp']['use_gp']}\n重置需要: {res['gp']['need_gp']}\n种子: \n上传: {res['tor']['upload']}\n下载: {res['tor']['download']}\n比率: {res['tor']['ratio']}\n完成种子: {res['tor']['torrent_completes']}\n完成画廊: {res['tor']['gallery_completes']}\n做种时间: {res['tor']['seedmins']}\nGP来源: \n浏览画廊: {res['GP_Gained']['gallery_visits']}\n完成种子: {res['GP_Gained']['torrent_completions']}\n存档下载: {res['GP_Gained']['archive_downloads']}\nH@H: {res['GP_Gained']['Hentai@Home']}\n排行: \n{', '.join(f'{k}: {v}' for k, v in res['Toplists'].items())}\n愿力: {res['power']}</blockquote>"
+                        await update.message.reply_html(message)
+                    else:
+                        await update.message.reply_text(f"出现问题: \n{res}")
+
 join_handler = ConversationHandler(
     entry_points=[CommandHandler('join', join_addr)],  # 用户输入 /start 指令时进入对话
     states={
@@ -1270,7 +1315,14 @@ token_handler = ConversationHandler(
 
 async def register_commands(app):
     """异步注册命令"""
-    await app.bot.set_my_commands(COMMANDS)
+    await app.bot.set_my_commands(COMMANDS, scope=BotCommandScopeDefault())
+    if os.path.exists("./white.json"):
+        with open("./white.json", 'r', encoding='utf-8') as f:
+            white_list = json.load(f)
+            for x in white_list:
+                await app.bot.set_my_commands(WHITE_COMMANDS, scope=BotCommandScopeChat(chat_id=x))
+    for x in config['gm_list']:
+        await app.bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=x))
 
 async def on_mysql(update: Update):
     user_id = update.message.from_user.id
@@ -1303,6 +1355,7 @@ def main():
     app.add_handler(CommandHandler("server_list", server_list))
     app.add_handler(CommandHandler("my_info", my_info))
     app.add_handler(CommandHandler("give_gp", give_GP))
+    app.add_handler(CommandHandler("eh_info", eh_info))
     app.add_handler(CommandHandler("white_add", white_add))
     app.add_handler(CommandHandler("white_del", white_del))
     app.add_handler(CommandHandler("ban", ban_add))

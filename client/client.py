@@ -210,5 +210,101 @@ def status():
         logging.error("密钥错误！")
         return jsonify({"error": "密钥错误"})
 
+@app.route('/api/eh-status', methods=['POST'])
+def eh_hh_status():
+    data = request.get_json()
+    if data["key"] == config['key']:
+        eh_cookie = random.choice(config['eh_cookies'])
+        hh = requests.get(url="https://e-hentai.org/hentaiathome.php", cookies=eh_cookie, proxies=proxies)
+        if hh.status_code == 200:
+            b = []
+            soup = BeautifulSoup(hh.text, 'html.parser')
+            table = soup.find("table", id="hct")
+            if not table:
+                return jsonify({"code": 500, "message": "你没有H@H"})
+            trs = table.find_all("tr")
+            for tr in trs:
+                tds = tr.find_all("td")
+                if not tds:
+                    continue
+                else:
+                    b.append(f"名: {tds[0].text.replace("\n", "").replace(" ", "")}: \n状态: {"🟢" if tds[2].text == "Online" else "🔴"}, 最后: {tds[4].text}, 信任: {tds[10].text}, 质量: {tds[11].text}, 速度: {tds[12].text}, 获取量: {tds[13].text}, 地区: {tds[14].text}\n")
+            return jsonify({"code": 200, "message": b})
+        else:
+            return jsonify({"code": 404, "message": "请求页面失败"})
+    else:
+        return jsonify({"code": 403, "message": "密钥错误"})
+    
+@app.route('/api/h@h', methods=['POST'])
+def eh_status():
+    data = request.get_json()
+    if data["key"] == config['key']:
+        eh_cookie = random.choice(config['eh_cookies'])
+        hh = requests.get(url="https://e-hentai.org/hentaiathome.php", cookies=eh_cookie, proxies=proxies)
+        if hh.status_code == 200:
+            soup = BeautifulSoup(hh.text, 'html.parser')
+            table = soup.find("table", id="hct")
+            if not table:
+                return jsonify({"code": 500, "message": "你没有H@H"})
+            trs = table.find_all("tr")
+            for tr in trs:
+                tds = tr.find_all("td")
+                if not tds:
+                    continue
+                else:
+                    if not tds[2].text == "Online":
+                        return jsonify({"code": 200, "message": "‼️‼️‼️‼️‼️‼️‼️\n有H@H掉线啦‼️‼️"})
+        else:
+            return jsonify({"code": 404, "message": "请求页面失败"})
+    else:
+        return jsonify({"code": 403, "message": "密钥错误"})
+    
+@app.route('/api/eh-info', methods=['POST'])
+def eh_info():
+    data = request.get_json()
+    if data["key"] == config['key']:
+        eh_cookie = random.choice(config['eh_cookies'])
+        hh = requests.get(url="https://e-hentai.org/home.php", cookies=eh_cookie, proxies=proxies)
+        if hh.status_code == 200:
+            soup = BeautifulSoup(hh.text, 'html.parser')
+            homeboxs = soup.find_all("div", class_="homebox")
+            GPs = homeboxs[0].find_all("strong")
+            tors = homeboxs[1].find_all("td", class_="c1")
+            GP_Gained = homeboxs[2].find_all("td", style="font-weight:bold; text-align:right")
+            if not homeboxs[3].find("td", style="vertical-align:top; padding-top:4px"):
+                Toplists = ""
+            else:
+                Toplists = homeboxs[3].find_all("td", style="text-align:right")
+                Toplist = homeboxs[3].find_all("a")
+            power = homeboxs[4].find("div", style="margin-top:5px; font-size:14pt; font-weight:bold")
+            info = {
+                "gp": {
+                    "gp": GPs[1].text,
+                    "use_gp": GPs[0].text,
+                    "need_gp": GPs[2].text
+                },
+                "tor": {
+                    "upload": tors[0].text,
+                    "download": tors[1].text,
+                    "ratio": tors[2].text,
+                    "torrent_completes": tors[3].text,
+                    "gallery_completes": tors[4].text,
+                    "seedmins": tors[5].text
+                },
+                "GP_Gained": {
+                    "gallery_visits": GP_Gained[0].text,
+                    "torrent_completions": GP_Gained[1].text,
+                    "archive_downloads": GP_Gained[2].text,
+                    "Hentai@Home": GP_Gained[3].text
+                },
+                "Toplists": {name.text: st.text for name, st in zip(Toplist, Toplists)} if Toplists else {},
+                "power": power.text
+            }
+            return jsonify({"code": 200, "json": info})
+        else:
+            return jsonify({"code": 404, "message": "请求页面失败"})
+    else:
+        return jsonify({"code": 403, "message": "密钥错误"})
+
 if __name__ == '__main__':
     app.run(debug=True,host='0.0.0.0', port=config['port'])
