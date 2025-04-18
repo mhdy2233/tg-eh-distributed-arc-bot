@@ -15,11 +15,12 @@ async def convert_to_mib(value):
 
     if unit.lower() == "gib":  # GiB 转换为 MiB
         number *= 1024
-
+    elif unit.lower() == "kib":
+        number /= 1024
     return int(number) if number.is_integer() else number
 
 async def eh_arc(gid, token):
-    url = f"https://exhentai.org/archiver.php?gid={gid}&token={token}"
+    url = f"https://e-hentai.org/archiver.php?gid={gid}&token={token}"
     arc = requests.get(url=url, cookies=random.choice(config['eh_cookies']), proxies=random.choice(config['proxy']))
 
     soup = BeautifulSoup(arc.text, 'html.parser')
@@ -29,18 +30,19 @@ async def eh_arc(gid, token):
     original_size = await convert_to_mib(strong[1].text)   # 原图大小
     resample_size = await convert_to_mib(strong[3].text)   # 重彩样大小
     if strong[2].text == "Free!":
-        resample_gp = round(resample_size / 0.063)
+        resample_gp = round(resample_size / 0.062)
     elif strong[2].text == "N/A":
         resample_gp = "N/A"
     else:
         resample_gp = round(int(strong[2].text.split(" ")[0].replace(",", "")))
     if strong[0].text == "Free!":
-        original_gp = round(original_size / 0.063)
+        original_gp = round(original_size / 0.062)
     elif strong[0].text == "N/A":
         original_gp = "N/A"
     else:
         original_gp = round(int(strong[0].text.split(" ")[0].replace(",", "")))
     gp = [original_gp, resample_gp]
+    print(gp)
     return gp
 
 def arc_download(addr, key, gid, token, clarity, use_gp):
@@ -81,6 +83,8 @@ async def eh_page_meta(link):
     if not link.startswith(("http://", "https://")):
         link = "https://" + link
     urls = urlparse(link).path.strip("/").split("/")
+    if not len(urls) == 3:
+        return
     gid, token = urls[1], urls[2]
     page_meta = await eh_meta(gid, token)
     if page_meta['gmetadata'][0].get('error'):

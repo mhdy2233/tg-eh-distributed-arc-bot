@@ -3,6 +3,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from eharc import arc_download
 from collections import defaultdict
+import ipaddress
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
@@ -73,7 +74,7 @@ async def verify_api_key(raw_key: str):
         return result
     return None
 
-async def arc_download_url(gid, token, clarity, use_gp):
+async def arc_download_url(gid, token, clarity, use_gp, title1, title2, image_url, log_type, user_ip= None):
     nnn = 0
     global db_pool
     while True:
@@ -90,6 +91,7 @@ async def arc_download_url(gid, token, clarity, use_gp):
                         if link[0]:
                             shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
                             await cur.execute("UPDATE server_data SET use_gps = %s WHERE user_id = %s", (result[9] + int(use_gp), server_user_id))
+                            await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp, log_type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], int(ipaddress.IPv4Address(user_ip)) if user_ip else 1234, title1, title2, f"{gid}|{token}", image_url, clarity, int(use_gp), log_type))
                             return link[1]
                         else:
                             if "Free" in link[1]:
@@ -150,3 +152,4 @@ async def get_translations(english_words):
                 else:
                     tags_dict[tag_tra_dict[tag_list[0]]].append(tag_list[1])
             return dict(tags_dict)
+        

@@ -16,7 +16,6 @@ bot_token = config['bot_token']
 proxies = config.get("proxy")
 bot_username = config['bot_username']
 my_chat = config['my_chat']
-has_spoiler_chat_list = [1529292095, 2386565629]
 # 定义命令列表
 COMMANDS = [
     BotCommand("start", "开始使用机器人"),
@@ -172,7 +171,8 @@ async def mysql_(a):
                     url VARCHAR(255),
                     image_url VARCHAR(255),
                     type VARCHAR(255),
-                    use_gp INT
+                    use_gp INT,
+                    log_type VARCHAR(255)
                 )
             """)
             print("✅ 数据表 `logs` 已创建或已存在！")
@@ -568,10 +568,7 @@ async def ehentai(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         [InlineKeyboardButton("点击跳转画廊", url=url),
                         InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")]
                         ])
-                if int(str(chat_id)[4:]) in has_spoiler_chat_list:
-                    has_spoiler=False
-                else:
-                    has_spoiler=True
+                has_spoiler=True
             await context.bot.edit_message_media(
                 media=InputMediaPhoto(media=cs[0], caption=cs[1], parse_mode="HTML", has_spoiler=has_spoiler),
                 reply_markup=keyboard,
@@ -665,7 +662,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
                                 await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1][:-9] + "2" + link[1][-9 +1:]}\n?号前数字为0-3, 分别为英文原图, 英文重采样, 日文原图, 日文重采样可以自己根据需要修改(不用试了不存在白嫖GP的bug)。", reply_markup=keyboard, disable_web_page_preview=True, reply_to_message_id=query.message.message_id)
                                 await cur.execute("UPDATE server_data SET use_gps = %s WHERE user_id = %s", (result[9] + int(use_gp), server_user_id))
-                                await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], int(query.from_user.id), context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp) ))
+                                await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp, log_type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], int(query.from_user.id), context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp), "bot"))
                                 break
                             else:
                                 if "GP不足" in link[1]:
@@ -700,8 +697,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await cur.execute("UPDATE server_data SET enable = %s WHERE id = %s", ("on", data[1]))
                 await cur.execute("SELECT * FROM server_data WHERE user_id = %s", (query.from_user.id,))
                 result = await cur.fetchone()  # 获取查询结果
-                addr = row[4]
-                key = row[5]
+                addr = result[4]
+                key = result[5]
                 status = await addr_status(addr, token=key)
                 if status == 200:
                     await context.bot.send_message(chat_id=query.message.chat.id, text="启用成功")
@@ -988,16 +985,11 @@ async def addr_client_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
     else:
         token = context.user_data['token']
-        status = await addr_status(url, token)
-        if status == 200:
-            async with db_pool.acquire() as conn:  # 获取连接
-                async with conn.cursor() as cur:  # 创建游标
-                    await cur.execute("UPDATE server_data SET addr = %s WHERE user_id = %s", (url, update.message.from_user.id))
-                    await update.message.reply_text(f"修改成功！\n当前addr(地址为)：{url}\ntoken(key)为：{token}")
-                    return ConversationHandler.END
-        else:
-            await update.message.reply_text(status)
-            return ConversationHandler.END
+        async with db_pool.acquire() as conn:  # 获取连接
+            async with conn.cursor() as cur:  # 创建游标
+                await cur.execute("UPDATE server_data SET addr = %s WHERE user_id = %s", (url, update.message.from_user.id))
+                await update.message.reply_text(f"修改成功！\n当前addr(地址为)：{url}\ntoken(key)为：{token}")
+                return ConversationHandler.END
 
 async def token_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query

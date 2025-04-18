@@ -28,6 +28,7 @@
       -   ![](https://fj.mhdy.shop/2025-04-17-20-59-48_20250417205948804.png)
 10. - 添加节点以及管理员黑白名单的操作
     - ![](https://fj.mhdy.shop/2025-04-17-21-01-26_20250417210126569.png)
+11. - 查看自己的eh主页信息
 
 </details> 
 
@@ -67,6 +68,19 @@ eh_cookies: [{
 修改文件中的cookie以及key和端口(如果你的网络可以直接更新ig那么ig可不填)  
 key为在bot中添加时所需  
 `python3 client.py` 启动  
+
+## api端为绑定了网页
+目前api网站位于 https://eh-arc-api.mhdy.icu  
+公开测试key 为`eh_arc_3Kihn51aRdoJtazQCR7SxbKrDpI`和`eh_arc_gRTVsgAvFWCNvy-QcfUFXi8FILk`  
+创建api key的路径为`/create-key` 方法为post，仅允许127.0.0.1访问保证安全，json携带 gp GP数量 如:  
+`curl -X POST "http://127.0.0.1:11919/create-key"   -H "Content-Type: application/json"   -d '{"gp": 20000}'`  
+
+查询api key的剩余为`/left` 方法为get，请求头中需携带 X-API-Key 如:  
+`curl -X GET "http://127.0.0.1:11919/left"   -H "X-API-Key: eh_arc_3Kihn51aRdoJtazQCR7SxbKrDpI"`  
+
+处理归档请求为`/create-item` 方法为post，json携带 gid, token, clarity 如:  
+`curl -X POST "http://127.0.0.1:11919/create-item"   -H "X-API-Key: eh_arc_3Kihn51aRdoJtazQCR7SxbKrDpI" -H "Content-Type: application/json" -d '{"gid":"3320297", "token":"c552c9be22", "clarity":"original"}'`  
+
 **注意事项：**
 首先你的网络需要可以连接到e-hentai以及exhentai(可使用http代理)  
 client需要flask, flask_CORS, bs4, requests，flask_limiter可以使用pip3进行安装

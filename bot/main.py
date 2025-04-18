@@ -65,7 +65,7 @@ async def eh_page(gid, token):
         title1 = soup.find('h1', id='gn').text   # 主标题
         title2 = soup.find('h1', id='gj').text   # 副标题
         page_type = soup.find('div', id='gdc').text.lower()  # 画廊类型
-        if soup.find('div', id='gdn').text == "Disowned":
+        if soup.find('div', id='gdn').text == "(Disowned)":
             uploader = "已弃用"
         else:
             uploader = f"<a href='{soup.find('div', id='gdn').find('a')['href']}'>{soup.find('div', id='gdn').find('a').text}</a>"    # 上传者
@@ -91,15 +91,7 @@ async def eh_page(gid, token):
         return 500
 
 def convert_to_mib(value):
-    """_summary_
-
-    Args:
-        value (str): 提取出的画廊大小
-
-    Returns:
-        _type_: _description_
-    """
-    match = re.match(r"([\d.]+)\s*(MiB|GiB)", value, re.IGNORECASE)
+    match = re.match(r"([\d.]+)\s*(MiB|GiB|KiB)", value, re.IGNORECASE)
     if not match:
         return None  # 无法匹配格式，返回 None
     
@@ -108,7 +100,8 @@ def convert_to_mib(value):
 
     if unit.lower() == "gib":  # GiB 转换为 MiB
         number *= 1024
-
+    elif unit.lower() == "kib":
+        number /= 1024
     return int(number) if number.is_integer() else number
 
 def eh_arc(gid, token):
@@ -122,13 +115,13 @@ def eh_arc(gid, token):
     original_size = convert_to_mib(strong[1].text)   # 原图大小
     resample_size = convert_to_mib(strong[3].text)   # 重彩样大小
     if strong[2].text == "Free!":
-        resample_gp = round(resample_size / 0.063)
+        resample_gp = round(resample_size / 0.062)
     elif strong[2].text == "N/A":
         resample_gp = "N/A"
     else:
         resample_gp = round(int(strong[2].text.split(" ")[0].replace(",", "")))
     if strong[0].text == "Free!":
-        original_gp = round(original_size / 0.063)
+        original_gp = round(original_size / 0.062)
     elif strong[0].text == "N/A":
         original_gp = "N/A"
     else:
