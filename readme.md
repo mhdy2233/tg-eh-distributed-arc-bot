@@ -1,5 +1,6 @@
 # 分布式tg eh归档bot
-目前部署的bot端为[归档大王](https://t.me/ehentai_archive_bot)  
+~~目前部署的bot端为[归档大王](https://t.me/ehentai_archive_bot)  ~~
+归档大王目前的项目为 https://github.com/mhdy2233/archive-at-home  
 归档bot频道为[EH-ABot公告频道](https://t.me/EH_ArBot)  
 作者频道为[垃圾机场](https://t.me/lajijichang) 
 <details>
