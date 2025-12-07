@@ -1,4 +1,4 @@
-import requests, os, json, re, yaml, random, io, time
+import requests, os, json, re, yaml, random, io, time, asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, BotCommand, InlineQueryResultArticle, InputTextMessageContent, InlineQueryResultPhoto, InlineQueryResultsButton, BotCommandScopeDefault, BotCommandScopeChat
 from telegram.ext import CommandHandler, MessageHandler, ContextTypes, ConversationHandler, filters, Application, CallbackQueryHandler, filters, InlineQueryHandler
 from telegram.request import HTTPXRequest
@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import aiomysql
 import uuid
 from collections import defaultdict
+from telepress import publish_text, TelePressError, ValidationError
 
 with open("./config.yml", 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
@@ -294,11 +295,11 @@ async def page(gid, token, context, user_id):
                     tagg = tagg + key + "： #" + ' #'.join(value) + "\n"
                 url = await eh_dmca(gid)
                 if url:
-                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("点击跳转本子", url=url)]])
-                    keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("点击跳转本子", url=url)], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("点击跳转本子", url=url)], [InlineKeyboardButton("📝 推送到Telegraph", callback_data=f"telegraph|{gid}|{token}|{user_id}")]])
+                    keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("点击跳转本子", url=url)], [InlineKeyboardButton("📝 推送到Telegraph", callback_data=f"telegraph|{gid}|{token}|{user_id}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
                 else:
-                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")]])
-                    keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")], [InlineKeyboardButton("📝 推送到Telegraph", callback_data=f"telegraph|{gid}|{token}|{user_id}")]])
+                    keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}")], [InlineKeyboardButton("📝 推送到Telegraph", callback_data=f"telegraph|{gid}|{token}|{user_id}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
                 caption = f"<blockquote expandable>主标题：{page_meta[1][0]}\n副标题：{page_meta[1][1]}\n画廊类型：{page_type}\n上传者：{page_meta[1][3]}\n上传时间：{page_meta[1][4]}\n画廊大小：{page_meta[1][5]}\n页数：{page_meta[1][6]}\n评分：{page_meta[1][7]}\n\n{tagg}</blockquote>"
                 context.user_data['主标题'] = page_meta[1][0]
                 context.user_data['副标题'] = page_meta[1][1]
@@ -325,8 +326,8 @@ async def page(gid, token, context, user_id):
                     tag = ' '.join([f"#{word}" for word in x[1:]])
                     tagg = tagg + x[0] + "：" + tag + "\n"
                 caption = f"<blockquote expandable>主标题：{result[1][0]}\n副标题：{result[1][1]}\n画廊类型：{page_type}\n上传者：{result[1][3]}\n上传时间：{result[1][4]}\n语言：{language}\n画廊大小：{result[1][6]}\n页数：{result[1][7]}\n收藏数：{result[1][8]}\n评分：{result[1][9]}\n\n{tagg}</blockquote>"
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3&from=1000")]])
-                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("归档下载", callback_data=f"arc|{gid}|{token}")], [InlineKeyboardButton("📝 推送到Telegraph", callback_data=f"telegraph|{gid}|{token}|{user_id}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3&from=1000")]])
+                keyboard2 = InlineKeyboardMarkup([[InlineKeyboardButton("获取元数据", callback_data=f"json|{gid}|{token}|{user_id}"), InlineKeyboardButton("在bot中打开", url=f"https://t.me/{bot_username}?start={gid}_{token}")], [InlineKeyboardButton("📝 推送到Telegraph", callback_data=f"telegraph|{gid}|{token}|{user_id}")], [InlineKeyboardButton("还在为进不去里站而苦恼吗？点击购买里站帐号！", url="https://shop.mhdy.icu?cid=2&mid=3")]])
                 context.user_data['主标题'] = result[1][0]
                 context.user_data['副标题'] = result[1][1]
                 context.user_data['image'] = result[2]
@@ -367,6 +368,123 @@ async def check(user_id):
                     return random_number, random_number + result[4]
                 else:
                     return "今日已签到"
+
+async def publish_to_telegraph(gid, token):
+    """将画廊信息发布到Telegraph
+    
+    Args:
+        gid: 画廊ID
+        token: 画廊token
+    
+    Returns:
+        tuple: (telegraph_url, error_message)
+    """
+    try:
+        # 输入验证
+        if not gid or not token:
+            return None, "画廊ID或token为空"
+        
+        # 获取画廊元数据
+        meta = await eh_meta(gid, token)
+        if not meta or 'gmetadata' not in meta or not meta['gmetadata']:
+            return None, "获取画廊元数据失败"
+        
+        gallery = meta['gmetadata'][0]
+        
+        # 检查是否有错误（如画廊不存在）
+        if gallery.get('error'):
+            return None, f"画廊错误: {gallery.get('error')}"
+        
+        title = gallery.get('title', '未知标题')
+        title_jpn = gallery.get('title_jpn', '')
+        category = gallery.get('category', '未知')
+        uploader = gallery.get('uploader', '未知')
+        posted = gallery.get('posted', '')
+        filecount = gallery.get('filecount', '0')
+        filesize = gallery.get('filesize', 0)
+        rating = gallery.get('rating', '0')
+        tags = gallery.get('tags', [])
+        
+        # 转换时间戳
+        if posted:
+            try:
+                posted_time = datetime.fromtimestamp(int(posted)).strftime('%Y-%m-%d %H:%M:%S')
+            except (ValueError, OSError, OverflowError):
+                posted_time = posted
+        else:
+            posted_time = '未知'
+        
+        # 转换文件大小
+        if filesize:
+            if filesize > 1024 * 1024 * 1024:
+                size_str = f"{filesize / 1024 / 1024 / 1024:.2f} GB"
+            elif filesize > 1024 * 1024:
+                size_str = f"{filesize / 1024 / 1024:.2f} MB"
+            else:
+                size_str = f"{filesize / 1024:.2f} KB"
+        else:
+            size_str = '未知'
+        
+        # 整理标签
+        tags_by_type = {}
+        for tag in tags:
+            if ':' in tag:
+                tag_type, tag_name = tag.split(':', 1)
+            else:
+                tag_type, tag_name = 'misc', tag
+            if tag_type not in tags_by_type:
+                tags_by_type[tag_type] = []
+            tags_by_type[tag_type].append(tag_name)
+        
+        # 构建 Markdown 内容
+        content = f"""# {title}
+
+"""
+        if title_jpn:
+            content += f"**日文标题**: {title_jpn}\n\n"
+        
+        content += f"""## 基本信息
+
+- **类型**: {category}
+- **上传者**: {uploader}
+- **发布时间**: {posted_time}
+- **页数**: {filecount}
+- **大小**: {size_str}
+- **评分**: {rating}
+
+## 画廊链接
+
+- [ExHentai](https://exhentai.org/g/{gid}/{token}/)
+- [E-Hentai](https://e-hentai.org/g/{gid}/{token}/)
+
+## 标签
+
+"""
+        for tag_type, tag_list in tags_by_type.items():
+            tag_type_cn = tag_tra_dict.get(tag_type, tag_type)
+            content += f"**{tag_type_cn}**: {', '.join(tag_list)}\n\n"
+        
+        content += f"""
+---
+
+*由 [EH归档Bot](https://t.me/{bot_username}) 生成*
+"""
+        
+        # 使用 telepress 发布到 Telegraph
+        telegraph_url = await asyncio.to_thread(
+            publish_text, 
+            content, 
+            title=title[:256]  # Telegraph 标题限制
+        )
+        
+        return telegraph_url, None
+        
+    except ValidationError as e:
+        return None, f"验证错误: {str(e)}"
+    except TelePressError as e:
+        return None, f"发布错误: {str(e)}"
+    except Exception as e:
+        return None, f"发生错误: {str(e)}"
                 
 async def my_info_text_(user_id, username):
     global db_pool
@@ -707,6 +825,51 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data[0] == "del":
         await query.answer()
         await query.delete_message()
+    elif data[0] == "telegraph":
+        # Telegraph 推送功能
+        # 安全检查：确保 callback data 格式正确
+        if len(data) < 4:
+            await query.answer(text="数据格式错误", show_alert=False)
+            return
+        if not str(query.from_user.id) == data[3]:
+            await query.answer(text="是你的东西吗？你就点！", show_alert=False)
+        else:
+            await query.answer(text="正在推送到Telegraph，请稍候...", show_alert=False)
+            if query.message.chat.id == chat.id:
+                return
+            keyboard = query.message.reply_markup.inline_keyboard  # 获取当前键盘
+            # 移除该按钮
+            new_keyboard = []
+            for row in keyboard:
+                new_row = [button for button in row if button.callback_data != clicked_text]
+                if new_row:  # 只保留仍有按钮的行
+                    new_keyboard.append(new_row)
+
+            # 更新键盘，如果键盘为空，则删除键盘
+            if new_keyboard:
+                await query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+            else:
+                await query.message.edit_reply_markup(reply_markup=None)  # 删除键盘
+            
+            # 发布到 Telegraph
+            telegraph_url, error = await publish_to_telegraph(data[1], data[2])
+            if telegraph_url:
+                telegraph_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📖 查看Telegraph页面", url=telegraph_url)]
+                ])
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id, 
+                    text=f"✅ 已成功推送到Telegraph！\n\n📝 主标题：{context.user_data.get('主标题', '未知')}\n📖 Telegraph链接：{telegraph_url}", 
+                    reply_markup=telegraph_keyboard,
+                    reply_to_message_id=query.message.message_id,
+                    disable_web_page_preview=False
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=query.message.chat_id, 
+                    text=f"❌ 推送到Telegraph失败\n错误信息：{error}", 
+                    reply_to_message_id=query.message.message_id
+                )
     elif data[0] == "json":
         if not str(query.from_user.id) == data[3]:
             await query.answer(text="是你的东西吗？你就点！", show_alert=False)
@@ -970,7 +1133,17 @@ async def server_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_html(text=message)
 
 async def help_(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_markdown(text=f"此bot为分布式eh归档链接获取bot\n基于[此项目](https://github.com/mhdy2233/tg-eh-distributed-arc-bot)制作")
+    await update.message.reply_markdown(text=f"""此bot为分布式eh归档链接获取bot
+基于[此项目](https://github.com/mhdy2233/tg-eh-distributed-arc-bot)制作
+
+**功能说明：**
+• 发送eh/ex链接获取画廊信息
+• 获取元数据(JSON格式)
+• 归档下载功能
+• 📝 **推送到Telegraph** - 将画廊信息发布到Telegraph方便分享
+
+**Telegraph功能：**
+点击画廊预览下的"推送到Telegraph"按钮，即可将画廊详情发布到telegra.ph，生成一个可分享的链接。""")
 
 async def addr_client(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
