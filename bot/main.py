@@ -201,10 +201,10 @@ async def eh_dmca(gid):
                         if zs[1] == "DMCA":
                             return None
                         else:
-                            url = "https://pan1.mhdy.shop/主要/本子/eh_DMCA/" + zs[1] + f"/{zs[0]}_{ehdmca_page['title'].replace("|", "")}.zip"
+                            url = "https://pan1.mhdy.shop/主要/本子/eh_DMCA/" + zs[1] + f"/{zs[0]}_{ehdmca_page['title'].replace('|', '')}.zip"
                             return url
                     else:
-                        url = "https://pan1.mhdy.shop/主要/本子/eh_DMCA/" + gg[0] + f"/{gid}_{ehdmca_page['title'].replace("|", "")}.zip"
+                        url = "https://pan1.mhdy.shop/主要/本子/eh_DMCA/" + gg[0] + f"/{gid}_{ehdmca_page['title'].replace('|', '')}.zip"
                         return url
             else:
                 return None
