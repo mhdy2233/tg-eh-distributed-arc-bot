@@ -272,26 +272,66 @@ class TestPublishToTelegraphFunction:
         # 模拟 eh_meta 返回的数据
         meta = MOCK_GALLERY_META
         
-        # 验证元数据结构
-        assert meta is not None
-        assert 'gmetadata' in meta
-        assert len(meta['gmetadata']) > 0
+        # 模拟 HTML 响应（用于预览图）
+        html_content = """
+        <html>
+            <body>
+                <img src="https://ehgt.org/t/123/cover.jpg" />
+                <div class="gdtm">
+                    <img src="https://ehgt.org/t/123/001.jpg" />
+                </div>
+                 <div class="gdtm">
+                    <img src="https://ehgt.org/t/123/002.jpg" />
+                </div>
+            </body>
+        </html>
+        """
         
-        gallery = meta['gmetadata'][0]
-        title = gallery.get('title', '未知标题')
-        
-        # 验证可以正确提取标题
-        assert title == "Test Gallery Title"
-        
-        # 验证标题限制逻辑
-        limited_title = title[:256]
-        assert len(limited_title) <= 256
-        
-        # 模拟 publish_text 调用
-        with patch('telepress.publish_text') as mock_publish:
+        # Mock requests.get inside bot module (bot.py)
+        # Note: We must patch 'bot.publish_text' because 'from telepress import publish_text' is used in bot.py
+        with patch('bot.eh_meta', new_callable=AsyncMock) as mock_eh_meta, \
+             patch('bot.requests.get') as mock_requests_get, \
+             patch('bot.publish_text') as mock_publish:
+            
+            mock_eh_meta.return_value = meta
+            
+            mock_response = Mock()
+            
             mock_publish.return_value = "https://telegra.ph/Test-Gallery-12-07"
-            result = mock_publish("test content", title=limited_title)
-            assert result == "https://telegra.ph/Test-Gallery-12-07"
+
+            mock_response.text = html_content
+            mock_requests_get.return_value = mock_response
+            
+            # Import function to test
+            # Assumes PYTHONPATH includes the directory containing bot.py
+            from bot import publish_to_telegraph
+            
+            url, error = await publish_to_telegraph(12345, "abc123def")
+            
+            assert url == "https://telegra.ph/Test-Gallery-12-07"
+            assert error is None
+            
+            # Verify content
+            args, _ = mock_publish.call_args
+            content = args[0]
+            
+            # Check basic info
+            assert "# Test Gallery Title" in content
+            assert "**日文标题**: テストギャラリータイトル" in content
+            assert "**类型**: Doujinshi" in content
+            
+            # Check tags
+            assert "**语言**: chinese" in content
+            
+            # Check images (Markdown format)
+            # Cover image comes from MOCK_GALLERY_META not HTML, assuming MOCK data has thumb?
+            # MOCK_GALLERY_META doesn't have 'thumb' field in the definition at top of file!
+            # Let's add it to the mock data in the test or modify the global mock.
+            # But here I can just assert previews which come from HTML.
+            
+            assert "![预览](https://ehgt.org/t/123/001.jpg)" in content
+            assert "![预览](https://ehgt.org/t/123/002.jpg)" in content
+
     
     @pytest.mark.asyncio
     async def test_publish_with_empty_input(self):

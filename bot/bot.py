@@ -394,6 +394,38 @@ async def publish_to_telegraph(gid, token):
         # 检查是否有错误（如画廊不存在）
         if gallery.get('error'):
             return None, f"画廊错误: {gallery.get('error')}"
+            
+        # 获取预览图
+        previews = []
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+            }
+            target_url = f"https://e-hentai.org/g/{gid}/{token}/"
+            
+            eh_cookie = random.choice(config.get('eh_cookies', [{}])) if config.get('eh_cookies') else {}
+            
+            res = await asyncio.to_thread(
+                requests.get, 
+                target_url, 
+                headers=headers, 
+                cookies=eh_cookie,
+                proxies=proxies, 
+                timeout=10
+            )
+            html = res.text
+            
+            # 使用更健壮的正则匹配图片链接
+            found_urls = re.findall(r'https?://(?:[a-z0-9-]+\.)*(?:ehgt|exhentai|e-hentai)\.org/[a-z]/[\w/.-]+\.jpg', html)
+            
+            seen = set()
+            for url in found_urls:
+                if url not in seen and ('/t/' in url or '/m/' in url):
+                    seen.add(url)
+                    previews.append(url)
+            previews = previews[:20]
+        except Exception as e:
+            print(f"获取预览图失败: {e}")
         
         title = gallery.get('title', '未知标题')
         title_jpn = gallery.get('title_jpn', '')
@@ -437,9 +469,14 @@ async def publish_to_telegraph(gid, token):
             tags_by_type[tag_type].append(tag_name)
         
         # 构建 Markdown 内容
-        content = f"""# {title}
+        content = f"# {title}\n\n"
+        
+        # 添加封面
+        thumb = gallery.get("thumb", "")
+        if thumb:
+            thumb = thumb.replace("s.exhentai.org", "ehgt.org")
+            content += f"![封面]({thumb})\n\n"
 
-"""
         if title_jpn:
             content += f"**日文标题**: {title_jpn}\n\n"
         
@@ -463,6 +500,13 @@ async def publish_to_telegraph(gid, token):
         for tag_type, tag_list in tags_by_type.items():
             tag_type_cn = tag_tra_dict.get(tag_type, tag_type)
             content += f"**{tag_type_cn}**: {', '.join(tag_list)}\n\n"
+            
+        # 添加预览图
+        if previews:
+            content += "## 预览\n\n"
+            for p in previews:
+                content += f"![预览]({p}) "
+            content += "\n\n"
         
         content += f"""
 ---
@@ -778,7 +822,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 shanghai_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')
                                 await cur.execute("UPDATE user_data SET user_gp = %s, use_gps = %s, use_num = %s, use_time = %s WHERE user_id = %s", (remnant_gp, user_data[5] + int(use_gp), user_data[6] + 1, shanghai_time, query.from_user.id))
                                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("点击跳转下载", url=link[1])]])
-                                await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{link[1][:-9] + "2" + link[1][-9 +1:]}\n?号前数字为0-3, 分别为英文原图, 英文重采样, 日文原图, 日文重采样可以自己根据需要修改(不用试了不存在白嫖GP的bug)。", reply_markup=keyboard, disable_web_page_preview=True, reply_to_message_id=query.message.message_id)
+                                modified_link = link[1][:-9] + "2" + link[1][-9 +1:]
+                                await context.bot.send_message(chat_id=query.message.chat.id, text=f"主标题：{context.user_data['主标题']}\n副标题：{context.user_data['副标题']}\n本次使用gp：{use_gp}\n剩余gp：{remnant_gp}\n下载链接默认有效期为1周，每个链接最多可以供2个ip使用。\n下载链接(可复制到多线程下载器)为：\n{modified_link}\n?号前数字为0-3, 分别为英文原图, 英文重采样, 日文原图, 日文重采样可以自己根据需要修改(不用试了不存在白嫖GP的bug)。", reply_markup=keyboard, disable_web_page_preview=True, reply_to_message_id=query.message.message_id)
                                 await cur.execute("UPDATE server_data SET use_gps = %s WHERE user_id = %s", (result[9] + int(use_gp), server_user_id))
                                 await cur.execute("INSERT INTO logs (time, client_id, user_id, title1, title2, url, image_url, type, use_gp, log_type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (shanghai_time, result[0], int(query.from_user.id), context.user_data['主标题'], context.user_data['副标题'], f"{gid}|{token}", context.user_data['image'], data[0], int(use_gp), "bot"))
                                 break
@@ -1123,10 +1168,14 @@ async def server_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if (str(update.message.from_user.id) in white_list) and update.message.chat.type == "private":
                 mes = ""
                 for x in result:
+                    enable_mark = "✔" if x[8] == "on" else "❌"
+                    status_mark = "✔" if x[6] == "active" else "❌"
+                    gp_mark = "足够" if x[7] == "active" else "GP不足"
+                    
                     if x[3]:
-                        mes += f"id：{x[0]} 用户： @{x[3]}\n启用：{"✔" if x[8] == "on" else "❌"} 状态：{"✔" if x[6] == "active" else "❌"} GP状态：{"足够" if x[7] == "active" else "GP不足"}\n\n"
+                        mes += f"id：{x[0]} 用户： @{x[3]}\n启用：{enable_mark} 状态：{status_mark} GP状态：{gp_mark}\n\n"
                     else:
-                        mes += f"id：{x[0]} 用户：<a href='tg://user?id={x[2]}'>{x[2]}</a>\n启用：{"✔" if x[8] == "on" else "❌"} 状态：{"✔" if x[6] == "active" else "❌"} GP状态：{"足够" if x[7] == "active" else "GP不足"}\n\n"
+                        mes += f"id：{x[0]} 用户：<a href='tg://user?id={x[2]}'>{x[2]}</a>\n启用：{enable_mark} 状态：{status_mark} GP状态：{gp_mark}\n\n"
                 message = f"当前共有 {len(result)} 个后端节点\n🟢在线可用有 {active} 个\n🛠掉线或状态异常有 {inactive} 个\n⚙️gp不足有 {gp_inactive} 个\n<blockquote expandable>{mes}</blockquote>"
             else:
                 message = f"当前共有 {len(result)} 个后端节点\n🟢在线可用有 {active} 个\n🛠掉线或状态异常有 {inactive} 个\n⚙️gp不足有 {gp_inactive} 个"
